@@ -1,0 +1,17 @@
+# Use LF line endings for all text files in the repo
+* text eol=lf
+
+# Windows-specific scripts must use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Treat common binary files as binary (no line ending conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.exe binary
+*.dll binary
+*.zip binary
