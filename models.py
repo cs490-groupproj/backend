@@ -1,0 +1,389 @@
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import Boolean, DECIMAL, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Uuid, text
+
+db = SQLAlchemy()
+
+
+class BodyParts(db.Model):
+    __tablename__ = 'body_parts'
+    __table_args__ = (
+        PrimaryKeyConstraint('body_part_id', name='PK__body_par__A94D6DCAC87A5DDE'),
+        Index('UQ__body_par__72E12F1B0B16A4A7', 'name', mssql_clustered=False, unique=True)
+    )
+
+    body_part_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+
+    exercises = db.relationship('Exercises', back_populates='body_part')
+
+
+class ClientBilling(db.Model):
+    __tablename__ = 'client_billing'
+    __table_args__ = (
+        PrimaryKeyConstraint('client_billing_id', name='PK__client_b__934B3E00115BA8B3'),
+    )
+
+    client_billing_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    card_number = db.Column(String(16, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    card_exp_month = db.Column(Integer, nullable=False)
+    card_exp_year = db.Column(Integer, nullable=False)
+    card_security_number = db.Column(Integer, nullable=False)
+    card_name = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    card_address_1 = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    card_city = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    card_postcode = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    renew_day_number = db.Column(Integer, nullable=False)
+    card_address_2 = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'))
+
+    client_coaches = db.relationship('ClientCoaches', back_populates='client_billing')
+
+
+class ExerciseCategories(db.Model):
+    __tablename__ = 'exercise_categories'
+    __table_args__ = (
+        PrimaryKeyConstraint('category_id', name='PK__exercise__D54EE9B475005C28'),
+        Index('UQ__exercise__72E12F1B482569AC', 'name', mssql_clustered=False, unique=True)
+    )
+
+    category_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+
+    exercises = db.relationship('Exercises', back_populates='category')
+
+
+class MealTypes(db.Model):
+    __tablename__ = 'meal_types'
+    __table_args__ = (
+        PrimaryKeyConstraint('meal_type_id', name='PK__meal_typ__6F7616D89F7C22FA'),
+    )
+
+    meal_type_id = db.Column(Integer, primary_key=True)
+    meal_name = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'))
+
+    meals = db.relationship('Meals', back_populates='meal_type')
+
+
+class Users(db.Model):
+    __tablename__ = 'users'
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', name='PK__users__B9BE370F88FDE7D6'),
+    )
+
+    user_id = db.Column(Uuid, primary_key=True, server_default=text('(newid())'))
+    first_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    last_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    is_coach = db.Column(Boolean, nullable=False)
+    is_active = db.Column(Boolean, nullable=False)
+    date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    coach_cost = db.Column(Integer)
+
+    client_coaches_client = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.client_id]', back_populates='client')
+    client_coaches_coach = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.coach_id]', back_populates='coach')
+    client_goals = db.relationship('ClientGoals', back_populates='user')
+    coach_surveys = db.relationship('CoachSurveys', back_populates='user')
+    meals = db.relationship('Meals', back_populates='user')
+    messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
+    messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
+    notifications = db.relationship('Notifications', back_populates='users')
+    user_tokens = db.relationship('UserTokens', back_populates='user')
+    workout_plans = db.relationship('WorkoutPlans', back_populates='users')
+    workouts = db.relationship('Workouts', back_populates='user')
+
+
+class UsersAudit(db.Model):
+    __tablename__ = 'users_audit'
+    __table_args__ = (
+        PrimaryKeyConstraint('audit_id', name='PK__users_au__5AF33E33B0309296'),
+    )
+
+    audit_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    audit_action = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    changed_by_admin = db.Column(Boolean, nullable=False, server_default=text('((0))'))
+    change_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    first_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'))
+    last_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'))
+    email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'))
+    is_coach = db.Column(Boolean)
+    is_active = db.Column(Boolean)
+    password_hash = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'))
+    date_created = db.Column(DateTime)
+    changed_by = db.Column(Uuid)
+
+
+class WorkoutTypes(db.Model):
+    __tablename__ = 'workout_types'
+    __table_args__ = (
+        PrimaryKeyConstraint('workout_type_id', name='PK__workout___D2C48094765B05CF'),
+        Index('UQ__workout___72E12F1BE0002418', 'name', mssql_clustered=False, unique=True)
+    )
+
+    workout_type_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+
+    workout_plans = db.relationship('WorkoutPlans', back_populates='workout_type')
+    workouts = db.relationship('Workouts', back_populates='workout_type')
+
+
+class ClientCoaches(db.Model):
+    __tablename__ = 'client_coaches'
+    __table_args__ = (
+        ForeignKeyConstraint(['client_billing_id'], ['client_billing.client_billing_id'], name='FK_UserCoaches_ClientBillingId'),
+        ForeignKeyConstraint(['client_id'], ['users.user_id'], name='FK_UserCoaches_ClientId'),
+        ForeignKeyConstraint(['coach_id'], ['users.user_id'], name='FK_UserCoaches_CoachId'),
+        PrimaryKeyConstraint('user_coach_id', name='PK__client_c__8B71770341DF5D1A')
+    )
+
+    user_coach_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    client_id = db.Column(Uuid, nullable=False)
+    coach_id = db.Column(Uuid, nullable=False)
+    client_billing_id = db.Column(Integer, nullable=False)
+    paired_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    client_billing = db.relationship('ClientBilling', back_populates='client_coaches')
+    client = db.relationship('Users', foreign_keys=[client_id], back_populates='client_coaches_client')
+    coach = db.relationship('Users', foreign_keys=[coach_id], back_populates='client_coaches_coach')
+
+
+class ClientGoals(db.Model):
+    __tablename__ = 'client_goals'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_ClientGoals_User'),
+        PrimaryKeyConstraint('user_survey_id', name='PK__client_g__642C11AEF8D1AE8E')
+    )
+
+    user_survey_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    weight_goal = db.Column(Integer)
+    height_goal = db.Column(Integer)
+    exercise_minutes_goal = db.Column(Integer)
+    personal_goals = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
+
+    user = db.relationship('Users', back_populates='client_goals')
+
+
+class CoachSurveys(db.Model):
+    __tablename__ = 'coach_surveys'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK__coach_sur__user___7ADC2F5E'),
+        PrimaryKeyConstraint('coach_survey_id', name='PK__coach_su__8E6168BA433627D0')
+    )
+
+    coach_survey_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    specialization = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    last_update = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    user = db.relationship('Users', back_populates='coach_surveys')
+
+
+class Exercises(db.Model):
+    __tablename__ = 'exercises'
+    __table_args__ = (
+        ForeignKeyConstraint(['body_part_id'], ['body_parts.body_part_id'], name='FK__exercises__body___10CB707D'),
+        ForeignKeyConstraint(['category_id'], ['exercise_categories.category_id'], name='FK__exercises__categ__11BF94B6'),
+        PrimaryKeyConstraint('exercise_id', name='PK__exercise__C121418E36037AC6')
+    )
+
+    exercise_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    name = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    body_part_id = db.Column(Integer, nullable=False)
+    category_id = db.Column(Integer, nullable=False)
+
+    body_part = db.relationship('BodyParts', back_populates='exercises')
+    category = db.relationship('ExerciseCategories', back_populates='exercises')
+    workout_plan_exercises = db.relationship('WorkoutPlanExercises', back_populates='exercise')
+    workout_exercises = db.relationship('WorkoutExercises', back_populates='exercise')
+
+
+class Meals(db.Model):
+    __tablename__ = 'meals'
+    __table_args__ = (
+        ForeignKeyConstraint(['meal_type_id'], ['meal_types.meal_type_id'], name='FK_Meals_MealTypeId'),
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_Users_UserId'),
+        PrimaryKeyConstraint('meal_id', name='PK__meals__2910B00FB4D19984')
+    )
+
+    meal_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    meal_datetime = db.Column(DateTime, nullable=False)
+    meal_type_id = db.Column(Integer, nullable=False)
+    created_dt = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    meal_type = db.relationship('MealTypes', back_populates='meals')
+    user = db.relationship('Users', back_populates='meals')
+    meal_foods = db.relationship('MealFoods', back_populates='meal')
+
+
+class Messages(db.Model):
+    __tablename__ = 'messages'
+    __table_args__ = (
+        ForeignKeyConstraint(['message_recipient'], ['users.user_id'], name='FK_Messages_MessageRecipient'),
+        ForeignKeyConstraint(['message_sender'], ['users.user_id'], name='FK_Messages_MessageSender'),
+        PrimaryKeyConstraint('message_id', name='PK__messages__0BBF6EE6A885E629')
+    )
+
+    message_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    message_sender = db.Column(Uuid, nullable=False)
+    message_recipient = db.Column(Uuid, nullable=False)
+    message_body = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    sent_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    users = db.relationship('Users', foreign_keys=[message_recipient], back_populates='messages_message_recipient')
+    users_ = db.relationship('Users', foreign_keys=[message_sender], back_populates='messages_message_sender')
+
+
+class Notifications(db.Model):
+    __tablename__ = 'notifications'
+    __table_args__ = (
+        ForeignKeyConstraint(['notification_recipient'], ['users.user_id'], name='FK_Notifications_NotificationRecipient'),
+        PrimaryKeyConstraint('notification_id', name='PK__notifica__E059842F267F080A')
+    )
+
+    notification_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    notification_recipient = db.Column(Uuid, nullable=False)
+    dismissed = db.Column(Boolean, nullable=False, server_default=text('((1))'))
+    notification_body = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    sent_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    users = db.relationship('Users', back_populates='notifications')
+
+
+class UserAuthentication(Users):
+    __tablename__ = 'user_authentication'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_UserAuthentication_UserId'),
+        PrimaryKeyConstraint('user_id', name='PK__user_aut__B9BE370FD88FA9B4')
+    )
+
+    user_id = db.Column(Uuid, primary_key=True)
+    password_hash = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+
+class UserTokens(db.Model):
+    __tablename__ = 'user_tokens'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_UserTokens_UserId'),
+        PrimaryKeyConstraint('token_id', name='PK__user_tok__CB3C9E175A336E7E')
+    )
+
+    token_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    token = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    date_expires = db.Column(DateTime, nullable=False)
+    user_id = db.Column(Uuid)
+
+    user = db.relationship('Users', back_populates='user_tokens')
+
+
+class WorkoutPlans(db.Model):
+    __tablename__ = 'workout_plans'
+    __table_args__ = (
+        ForeignKeyConstraint(['created_by'], ['users.user_id'], name='FK__workout_p__creat__2101D846'),
+        ForeignKeyConstraint(['workout_type_id'], ['workout_types.workout_type_id'], name='FK__workout_p__worko__200DB40D'),
+        PrimaryKeyConstraint('workout_plan_id', name='PK__workout___63DB3C9085BA90E6')
+    )
+
+    workout_plan_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    title = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    workout_type_id = db.Column(Integer)
+    description = db.Column(String(1000, 'SQL_Latin1_General_CP1_CI_AS'))
+    created_by = db.Column(Uuid)
+
+    users = db.relationship('Users', back_populates='workout_plans')
+    workout_type = db.relationship('WorkoutTypes', back_populates='workout_plans')
+    workout_plan_exercises = db.relationship('WorkoutPlanExercises', back_populates='workout_plan')
+    workouts = db.relationship('Workouts', back_populates='workout_plan')
+
+
+class MealFoods(db.Model):
+    __tablename__ = 'meal_foods'
+    __table_args__ = (
+        ForeignKeyConstraint(['meal_id'], ['meals.meal_id'], ondelete='CASCADE', name='FK_MealFoods_MealId'),
+        PrimaryKeyConstraint('meal_food_id', name='PK__meal_foo__3F8CC28374B66045')
+    )
+
+    meal_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    meal_id = db.Column(Integer, nullable=False)
+    fdc_id = db.Column(Integer, nullable=False)
+
+    meal = db.relationship('Meals', back_populates='meal_foods')
+
+
+class WorkoutPlanExercises(db.Model):
+    __tablename__ = 'workout_plan_exercises'
+    __table_args__ = (
+        ForeignKeyConstraint(['exercise_id'], ['exercises.exercise_id'], name='FK__workout_p__exerc__25C68D63'),
+        ForeignKeyConstraint(['workout_plan_id'], ['workout_plans.workout_plan_id'], ondelete='CASCADE', name='FK__workout_p__worko__24D2692A'),
+        PrimaryKeyConstraint('workout_plan_exercise_id', name='PK__workout___20D1E9E41C33385E')
+    )
+
+    workout_plan_exercise_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    workout_plan_id = db.Column(Integer, nullable=False)
+    exercise_id = db.Column(Integer, nullable=False)
+    position = db.Column(Integer, nullable=False, server_default=text('((0))'))
+    sets = db.Column(Integer)
+    reps = db.Column(Integer)
+    weight = db.Column(DECIMAL(8, 2))
+    rpe = db.Column(DECIMAL(3, 1))
+    duration_sec = db.Column(Integer)
+    distance_m = db.Column(DECIMAL(10, 2))
+    pace_sec_per_km = db.Column(DECIMAL(8, 2))
+    calories = db.Column(Integer)
+    notes = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
+
+    exercise = db.relationship('Exercises', back_populates='workout_plan_exercises')
+    workout_plan = db.relationship('WorkoutPlans', back_populates='workout_plan_exercises')
+
+
+class Workouts(db.Model):
+    __tablename__ = 'workouts'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK__workouts__user_i__17786E0C'),
+        ForeignKeyConstraint(['workout_plan_id'], ['workout_plans.workout_plan_id'], name='FK__workouts__workou__21F5FC7F'),
+        ForeignKeyConstraint(['workout_type_id'], ['workout_types.workout_type_id'], name='FK__workouts__workou__186C9245'),
+        PrimaryKeyConstraint('workout_id', name='PK__workouts__02AB2F8EF047554B')
+    )
+
+    workout_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    title = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    workout_type_id = db.Column(Integer)
+    workout_plan_id = db.Column(Integer)
+
+    user = db.relationship('Users', back_populates='workouts')
+    workout_plan = db.relationship('WorkoutPlans', back_populates='workouts')
+    workout_type = db.relationship('WorkoutTypes', back_populates='workouts')
+    workout_exercises = db.relationship('WorkoutExercises', back_populates='workout')
+
+
+class WorkoutExercises(db.Model):
+    __tablename__ = 'workout_exercises'
+    __table_args__ = (
+        ForeignKeyConstraint(['exercise_id'], ['exercises.exercise_id'], name='FK__workout_e__exerc__1C3D2329'),
+        ForeignKeyConstraint(['workout_id'], ['workouts.workout_id'], ondelete='CASCADE', name='FK__workout_e__worko__1B48FEF0'),
+        PrimaryKeyConstraint('workout_exercise_id', name='PK__workout___12A7653332BFAFB3')
+    )
+
+    workout_exercise_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    workout_id = db.Column(Integer, nullable=False)
+    exercise_id = db.Column(Integer, nullable=False)
+    position = db.Column(Integer, nullable=False, server_default=text('((0))'))
+    sets = db.Column(Integer)
+    reps = db.Column(Integer)
+    weight = db.Column(DECIMAL(8, 2))
+    rpe = db.Column(DECIMAL(3, 1))
+    duration_sec = db.Column(Integer)
+    distance_m = db.Column(DECIMAL(10, 2))
+    pace_sec_per_km = db.Column(DECIMAL(8, 2))
+    calories = db.Column(Integer)
+    notes = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
+
+    exercise = db.relationship('Exercises', back_populates='workout_exercises')
+    workout = db.relationship('Workouts', back_populates='workout_exercises')
