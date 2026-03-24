@@ -8,7 +8,9 @@ from auth.init_firebase import init_firebase
 from auth.authentication import require_auth
 from models import db, ExerciseCategories
 
-load_dotenv("/Users/dlamb/PyCharmProjects/group-backend/secrets/.env")
+base_dir = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(base_dir, 'secrets', '.env')
+load_dotenv(dotenv_path)
 
 app = Flask(__name__)
 CORS(app)
