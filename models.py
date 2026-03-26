@@ -219,6 +219,7 @@ class CoachSurveys(db.Model):
 class DailySurveyResponses(db.Model):
     __tablename__ = 'daily_survey_responses'
     __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_DailySurveyResponses_User'),
         PrimaryKeyConstraint('daily_survey_response_id', name='PK__daily_su__11D9911E8D15C919'),
     )
 
