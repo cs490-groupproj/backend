@@ -192,8 +192,8 @@ class ClientGoals(db.Model):
     user_id = db.Column(Uuid, nullable=False)
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    primary_goal_id = db.Column(Integer)
     weight_goal = db.Column(Integer)
-    height_goal = db.Column(Integer)
     exercise_minutes_goal = db.Column(Integer)
     personal_goals = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
 
