@@ -8,6 +8,8 @@ from auth.init_firebase import init_firebase
 from auth.authentication import require_auth
 from models import db, ExerciseCategories
 
+from endpoints.nutrition import nutrition_blueprint
+
 base_dir = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.join(base_dir, 'secrets', '.env')
 load_dotenv(dotenv_path)
@@ -18,6 +20,9 @@ CORS(app)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
 # print(os.getenv("DATABASE_URI"))
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
+
 db.init_app(app)
 
 init_firebase()
