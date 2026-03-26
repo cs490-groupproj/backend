@@ -18,20 +18,21 @@ def get_current_goals(user_id):
         return jsonify([{'error': 'You are not authorized to view this content'}]), 401
 
     return jsonify({
-        'primary_goal_id': current_goals.primary_goal,
+        'primary_goals_binary': current_goals.primary_goals,
         'weight_goal': current_goals.weight_goal,
         'exercise_minutes_goal': current_goals.exercise_minutes_goal,
         'personal_goals': current_goals.personal_goals,
         'date_created': current_goals.date_created
     }), 200
 
-class PrimaryGoals(Enum):
-    LOSE_WEIGHT = 0
-    BUILD_MUSCLE = 1
-    INCREASE_STRENGTH = 2
-    IMPROVE_ENDURANCE = 3
-    GENERAL_FITNESS = 4
-    SPORTS_PERFORMANCE = 5
+# Primary goals are stored as a binary string where the digits at each offset represent:
+# 0: Lose weight
+# 1: Build muscle
+# 2: Increase strength
+# 3: Improve endurance
+# 4: General fitness
+# 5: Sports performance
+# The binary string 110000 means the user has selected Lose weight and Build muscle
 
 @client_blueprint.route('/<user_id>/initial_goal_survey', methods=['POST'])
 @require_auth
@@ -48,21 +49,27 @@ def add_initial_goals(user_id):
 
     new_goal.user_id = UUID(user_id)
 
-    if (new_primary_goal := request.json.get('primary_goal')) is not None:
-        if new_primary_goal not in PrimaryGoals:
+    binary_chars = {'0', '1'}
+    if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
+        if len(new_primary_goals) != 6 or not set(new_primary_goals).issubset(binary_chars):
             return jsonify([{
-                'error': 'Primary goal is not valid. Use the primary goal ID to refer to your goal.',
-                'type_hints': {
-                    PrimaryGoals.LOSE_WEIGHT.value: 'LOSE_WEIGHT',
-                    PrimaryGoals.BUILD_MUSCLE.value: 'BUILD_MUSCLE',
-                    PrimaryGoals.INCREASE_STRENGTH.value: 'INCREASE_STRENGTH',
-                    PrimaryGoals.IMPROVE_ENDURANCE.value: 'IMPROVE_ENDURE',
-                    PrimaryGoals.GENERAL_FITNESS.value: 'GENERAL_FITNESS',
-                    PrimaryGoals.SPORTS_PERFORMANCE.value: 'SPORTS_PERFORMANCE'
+                'error': 'Primary goals are not valid. Use the primary goal binary system to refer to your goals.',
+                'hint': {
+                    'string': '110000',
+                    'meaning': 'represents offset 0 and 1 as selected',
+                    'offset_key': {
+                        0: 'Lose Weight',
+                        1: 'Build Muscle',
+                        2: 'Increase Strength',
+                        3: 'Improve Endurance',
+                        4: 'General Fitness',
+                        5: 'Sports Performance',
+
+                    }
                 }
             }]), 401
         else:
-            new_goal.primary_goal = new_primary_goal
+            new_goal.primary_goal = new_primary_goals
 
     if (new_weight := request.json.get('weight')) is not None:
         new_goal.weight_goal = new_weight
@@ -75,7 +82,7 @@ def add_initial_goals(user_id):
     db.session.commit()
 
     return jsonify({
-        'primary_goal_id': new_goal.primary_goal,
+        'primary_goals_binary': new_goal.primary_goals,
         'weight_goal': new_goal.weight_goal,
         'exercise_minutes_goal': new_goal.exercise_minutes_goal,
         'personal_goals': new_goal.personal_goals,
@@ -95,23 +102,30 @@ def edit_goals(user_id):
     if old_goal.user_id != user.user_id:
         return jsonify([{'error': 'You are not authorized to modify this content'}]), 401
 
-    if (new_primary_goal := request.json.get('primary_goal')) is not None:
-        if new_primary_goal not in PrimaryGoals:
-            return jsonify([{
-                'error': 'Primary goal is not valid. Use the primary goal ID to refer to your goal.',
-                'type_hints': {
-                    PrimaryGoals.LOSE_WEIGHT: 'LOSE_WEIGHT',
-                    PrimaryGoals.BUILD_MUSCLE: 'BUILD_MUSCLE',
-                    PrimaryGoals.INCREASE_STRENGTH: 'INCREASE_STRENGTH',
-                    PrimaryGoals.IMPROVE_ENDURANCE: 'IMPROVE_ENDURE',
-                    PrimaryGoals.GENERAL_FITNESS: 'GENERAL_FITNESS',
-                    PrimaryGoals.SPORTS_PERFORMANCE: 'SPORTS_PERFORMANCE'
-                }
-            }]), 401
-        else:
-            new_goal.primary_goal = new_primary_goal
+    if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
+        binary_chars = {'0', '1'}
+        if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
+            if len(new_primary_goals) != 6 or not set(new_primary_goals).issubset(binary_chars):
+                return jsonify([{
+                    'error': 'Primary goals are not valid. Use the primary goal binary system to refer to your goals.',
+                    'hint': {
+                        'string': '110000',
+                        'meaning': 'represents offset 0 and 1 as selected',
+                        'offset_key': {
+                            0: 'Lose Weight',
+                            1: 'Build Muscle',
+                            2: 'Increase Strength',
+                            3: 'Improve Endurance',
+                            4: 'General Fitness',
+                            5: 'Sports Performance',
+
+                        }
+                    }
+                }]), 401
+            else:
+                new_goal.primary_goal = new_primary_goals
     else:
-        new_primary_goal.primary_goal = old_goal.primary_goal
+        new_primary_goals.primary_goals = old_goal.primary_goals
 
     if (new_weight := request.json.get('weight')) is not None:
         new_goal.weight_goal = new_weight
@@ -130,7 +144,7 @@ def edit_goals(user_id):
     db.session.commit()
 
     return jsonify({
-        'primary_goal_id': new_goal.primary_goal,
+        'primary_goals_binary': new_goal.primary_goals,
         'weight_goal': new_goal.weight_goal,
         'exercise_minutes_goal': new_goal.exercise_minutes_goal,
         'personal_goals': new_personal_goals,
@@ -148,7 +162,7 @@ def get_goals(user_id):
             return jsonify([{'error': 'You are not authorized to view this content'}]), 401
 
     return jsonify([{
-        'primary_goal_id': g.primary_goal,
+        'primary_goals_binary': g.primary_goals,
         'weight_goal': g.weight_goal,
         'exercise_minutes_goal': g.exercise_minutes_goal,
         'personal_goals': g.personal_goals,
