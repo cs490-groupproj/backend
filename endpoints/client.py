@@ -69,7 +69,7 @@ def add_initial_goals(user_id):
                 }
             }]), 401
         else:
-            new_goal.primary_goal = new_primary_goals
+            new_goal.primary_goals = new_primary_goals
 
     if (new_weight := request.json.get('weight')) is not None:
         new_goal.weight_goal = new_weight
@@ -123,7 +123,7 @@ def edit_goals(user_id):
                     }
                 }]), 401
             else:
-                new_goal.primary_goal = new_primary_goals
+                new_goal.primary_goals = new_primary_goals
     else:
         new_primary_goals.primary_goals = old_goal.primary_goals
 
