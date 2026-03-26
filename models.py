@@ -50,6 +50,37 @@ class ExerciseCategories(db.Model):
 
     exercises = db.relationship('Exercises', back_populates='category')
 
+class MealPlans(db.Model):
+    __tablename__ = 'meal_plans'
+    __table_args__ = (
+        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_MealPlans_UserId'),
+        PrimaryKeyConstraint('meal_plan_id', name='PK__meal_pla__05C57607CEDCD543')
+    )
+
+    meal_plan_id= db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    meal_datetime = db.Column(DateTime, nullable=False)
+    user_id = db.Column(Uuid, nullable=False)
+
+    user = db.relationship('Users', back_populates='meal_plans')
+    meal_plan_foods = db.relationship('MealPlanFoods', back_populates='meal_plan')
+
+
+class MealPlanFoods(db.Model):
+    __tablename__ = 'meal_plan_foods'
+    __table_args__ = (
+        ForeignKeyConstraint(['meal_plan_id'], ['meal_plans.meal_plan_id'], name='FK_MealPlanFoods_MealPlanId'),
+        ForeignKeyConstraint(['meal_type_id'], ['meal_types.meal_type_id'], name='FK_MealPlans_MealTypeId'),
+        PrimaryKeyConstraint('meal_plan_food_id', name='PK__meal_pla__C8B81100F61548B4')
+    )
+
+    meal_plan_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    meal_plan_id = db.Column(Integer, nullable=False)
+    fdc_id = db.Column(Integer, nullable=False)
+    meal_type_id = db.Column(Integer, nullable=False)
+
+    meal_plan = db.relationship('MealPlans', back_populates='meal_plan_foods')
+    meal_type = db.relationship('MealTypes', back_populates='meal_plan_foods')
+
 
 class MealTypes(db.Model):
     __tablename__ = 'meal_types'
@@ -61,6 +92,7 @@ class MealTypes(db.Model):
     meal_name = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'))
 
     meals = db.relationship('Meals', back_populates='meal_type')
+    meal_plan_foods = db.relationship('MealPlanFoods', back_populates='meal_type')
 
 
 class Users(db.Model):
@@ -84,6 +116,7 @@ class Users(db.Model):
     client_goals = db.relationship('ClientGoals', back_populates='user')
     coach_surveys = db.relationship('CoachSurveys', back_populates='user')
     daily_survey_responses = db.relationship('DailySurveyResponses', back_populates='user')
+    meal_plans = db.relationship('MealPlans', back_populates='user')
     meals = db.relationship('Meals', back_populates='user')
     messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
     messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
