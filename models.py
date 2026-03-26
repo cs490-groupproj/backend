@@ -70,6 +70,7 @@ class Users(db.Model):
     )
 
     user_id = db.Column(Uuid, primary_key=True, server_default=text('(newid())'))
+    firebase_user_id = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     first_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     last_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
