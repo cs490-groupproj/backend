@@ -26,9 +26,10 @@ def require_auth(f):
         except Exception as e:
             return jsonify({'error': 'Invalid or expired token'}), 401
 
-        g.user = db.session.query(Users).where(Users.firebase_user_id == decoded_token.get('user_id')).first()
-        if g.user is None:
-            return jsonify({'error': 'This user has an account, but has not yet registered. If you are a frontend developer, call POST /users/register.'}), 401
+        if request.path != '/users/register':
+            g.user = db.session.query(Users).where(Users.firebase_user_id == decoded_token.get('user_id')).first()
+            if g.user is None:
+                return jsonify({'error': 'This user has an account, but has not yet registered. If you are a frontend developer, call POST /users/register.'}), 401
 
         return f(*args, **kwargs)
 
