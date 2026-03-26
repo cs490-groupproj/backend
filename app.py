@@ -8,6 +8,7 @@ from auth.init_firebase import init_firebase
 from auth.authentication import require_auth
 from models import db, ExerciseCategories
 
+from endpoints.client import client_blueprint
 from endpoints.nutrition import nutrition_blueprint
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,6 +25,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
 
 db.init_app(app)
+
+app.register_blueprint(client_blueprint, url_prefix='/clients')
 
 init_firebase()
 
