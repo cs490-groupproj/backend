@@ -10,6 +10,7 @@ from models import db, ExerciseCategories
 
 from endpoints.client import client_blueprint
 from endpoints.nutrition import nutrition_blueprint
+from endpoints.usda_proxy import usda_proxy_blueprint
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.join(base_dir, 'secrets', '.env')
@@ -22,11 +23,13 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
 # print(os.getenv("DATABASE_URI"))
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
+DATA_GOV_KEY = os.getenv("DATA_GOV_KEY")
 
 db.init_app(app)
 
 app.register_blueprint(client_blueprint, url_prefix='/clients')
+app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
+app.register_blueprint(usda_proxy_blueprint, url_prefix='/proxy/usda')
 
 init_firebase()
 
