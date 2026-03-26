@@ -28,16 +28,7 @@ def require_auth(f):
 
         g.user = db.session.query(Users).where(Users.firebase_user_id == decoded_token.get('user_id')).first()
         if g.user is None:
-            new_user = Users()
-            new_user.firebase_user_id = decoded_token.get('user_id')
-            new_user.first_name = 'New'
-            new_user.last_name = 'User'
-            new_user.email = decoded_token.get('email')
-            new_user.is_coach = False
-            new_user.is_active = True
-            db.session.add(new_user)
-            db.session.commit()
-            g.user = db.session.query(Users).where(Users.firebase_user_id == decoded_token.get('user_id')).first()
+            return jsonify({'error': 'This user has an account, but has not yet registered. If you are a frontend developer, call POST /users/register.'}), 401
 
         return f(*args, **kwargs)
 
