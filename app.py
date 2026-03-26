@@ -16,7 +16,7 @@ app = Flask(__name__)
 CORS(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
-print(os.getenv("DATABASE_URI"))
+# print(os.getenv("DATABASE_URI"))
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
@@ -34,7 +34,7 @@ def hello_world():  # put application's code here
 @app.route('/authtest')
 @require_auth
 def auth_required():
-    return jsonify({'message': f'You have successfully authenticated, {g.user.get("email")}'}), 200
+    return jsonify({'message': f'You have successfully authenticated, {g.firebase_user.get("email")}. Your name is {g.user.first_name}'}), 200
 
 
 if __name__ == '__main__':
