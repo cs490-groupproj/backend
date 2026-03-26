@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Boolean, DECIMAL, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Uuid, text
+from sqlalchemy import Boolean, DECIMAL, Date, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Uuid, text
 
 db = SQLAlchemy()
 
@@ -83,6 +83,7 @@ class Users(db.Model):
     client_coaches_coach = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.coach_id]', back_populates='coach')
     client_goals = db.relationship('ClientGoals', back_populates='user')
     coach_surveys = db.relationship('CoachSurveys', back_populates='user')
+    daily_survey_responses = db.relationship('DailySurveyResponses', back_populates='user')
     meals = db.relationship('Meals', back_populates='user')
     messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
     messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
@@ -180,6 +181,21 @@ class CoachSurveys(db.Model):
     last_update = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
 
     user = db.relationship('Users', back_populates='coach_surveys')
+
+
+class DailySurveyResponses(db.Model):
+    __tablename__ = 'daily_survey_responses'
+    __table_args__ = (
+        PrimaryKeyConstraint('daily_survey_response_id', name='PK__daily_su__11D9911E8D15C919'),
+    )
+
+    daily_survey_response_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    mood = db.Column(Integer, nullable=False)
+    feels_meeting_goals = db.Column(Integer, nullable=False)
+    date_submitted = db.Column(Date, nullable=False)
+
+    user = db.relationship('Users', back_populates='daily_survey_responses')
 
 
 class Exercises(db.Model):
