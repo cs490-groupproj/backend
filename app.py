@@ -1,4 +1,5 @@
 import os
+from flask_socketio import SocketIO
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, g
@@ -18,6 +19,9 @@ load_dotenv(dotenv_path)
 
 app = Flask(__name__)
 CORS(app)
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+import message_sockets # DO NOT REMOVE THIS. It appears unused, but needs to be here for the sockets to register
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
 # print(os.getenv("DATABASE_URI"))
@@ -49,4 +53,4 @@ def auth_required():
 
 
 if __name__ == '__main__':
-    app.run()
+    socketio.run(app, debug=True)
