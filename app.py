@@ -11,6 +11,7 @@ from models import db, ExerciseCategories
 from endpoints.client import client_blueprint
 from endpoints.nutrition import nutrition_blueprint
 from endpoints.usda_proxy import usda_proxy_blueprint
+from endpoints.workouts import workouts_blueprint
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.join(base_dir, 'secrets', '.env')
@@ -30,6 +31,7 @@ db.init_app(app)
 app.register_blueprint(client_blueprint, url_prefix='/clients')
 app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
 app.register_blueprint(usda_proxy_blueprint, url_prefix='/proxy/usda')
+app.register_blueprint(workouts_blueprint)
 
 init_firebase()
 

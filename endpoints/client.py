@@ -23,7 +23,8 @@ def get_current_goals(user_id):
         'exercise_minutes_goal': current_goals.exercise_minutes_goal,
         'personal_goals': current_goals.personal_goals,
         'date_created': current_goals.date_created
-    }), 200
+    }), 200 
+
 
 # Primary goals are stored as a binary string where the digits at each offset represent:
 # 0: Lose weight
