@@ -1,6 +1,4 @@
 import requests
-
-import app
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
 
@@ -27,4 +25,5 @@ def get_food(fdc_id):
 
 
 def _build_endpoint(path):
+    import app
     return BASE_URL + path + '?api_key=' + app.DATA_GOV_KEY

@@ -90,7 +90,7 @@ def add_initial_goals(user_id):
     }), 200
 
 
-@client_blueprint.route('/<user_id>/edit_goals')
+@client_blueprint.route('/<user_id>/edit_goals', methods=['PATCH'])
 @require_auth
 def edit_goals(user_id):
     user = g.user
@@ -185,7 +185,38 @@ def get_daily_survey(user_id):
             'feels_meeting_goals': survey.feels_meeting_goals
         }])
 
-@client_blueprint.route('/<user_id>/daily_survey/edit', methods=['POST'])
+@client_blueprint.route('/<user_id>/daily_survey/submit', methods=['POST'])
+@require_auth
+def submit_daily_survey(user_id):
+    user = g.user
+    mood = request.json['mood']
+    feels_meeting_goals = request.json['feels_meeting_goals']
+
+    if mood is None or feels_meeting_goals is None:
+        return jsonify({'error': 'JSON must contain mood and feels_meeting_goals'}), 400
+
+    survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()).first())
+
+    if survey is not None:
+        return jsonify([{'error': 'User already submitted a daily survey for today. Edit using edit endpoint.'}]), 400
+    else:
+        new_survey = DailySurveyResponses()
+        new_survey.user_id = user_id
+        new_survey.mood = mood
+        new_survey.feels_meeting_goals = feels_meeting_goals
+        new_survey.date_created = date.today()
+        db.session.add(new_survey)
+        db.session.commit()
+
+        return jsonify([{
+            'daily_survey_id': new_survey.daily_survey_response_id,
+            'mood': new_survey.mood,
+            'feels_meeting_goals': new_survey.feels_meeting_goals,
+            'date_created': new_survey.date_created
+        }]), 201
+
+
+@client_blueprint.route('/<user_id>/daily_survey/edit', methods=['PATCH'])
 @require_auth
 def edit_daily_survey(user_id):
     user = g.user
