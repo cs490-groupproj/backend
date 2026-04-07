@@ -91,7 +91,7 @@ def add_initial_goals(user_id):
     }), 200
 
 
-@client_blueprint.route('/<user_id>/edit_goals')
+@client_blueprint.route('/<user_id>/edit_goals', methods=['PATCH'])
 @require_auth
 def edit_goals(user_id):
     user = g.user
@@ -217,7 +217,7 @@ def submit_daily_survey(user_id):
         }]), 201
 
 
-@client_blueprint.route('/<user_id>/daily_survey/edit', methods=['POST'])
+@client_blueprint.route('/<user_id>/daily_survey/edit', methods=['PATCH'])
 @require_auth
 def edit_daily_survey(user_id):
     user = g.user

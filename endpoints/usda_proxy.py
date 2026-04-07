@@ -26,7 +26,7 @@ def get_food(fdc_id):
     return response.json(), response.status_code
 
 
-
 def _build_endpoint(path):
     key = os.getenv("DATA_GOV_KEY", "")
     return BASE_URL + path + "?api_key=" + key
+
