@@ -24,7 +24,7 @@ load_dotenv(dotenv_path)
 app = Flask(__name__)
 CORS(app)
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode='gevent', cors_allowed_origins="*")
 import message_sockets # DO NOT REMOVE THIS. It appears unused, but needs to be here for the sockets to register
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
