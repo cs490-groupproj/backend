@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from firebase_admin import auth as firebase_auth
 from models import ClientGoals, CoachSurveys, Users, db
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
@@ -311,7 +312,14 @@ def edit_user_account(user_id):
     if 'last_name' in body:
         g.user.last_name = body['last_name']
     if 'email' in body:
-        g.user.email = body['email']
+        new_email = body['email']
+        # Keep Firebase auth profile in sync with the app user profile.
+        try:
+            firebase_auth.update_user(g.user.firebase_user_id, email=new_email)
+        except Exception:
+            db.session.rollback()
+            return jsonify({'error': 'Failed to update email in Firebase'}), 502
+        g.user.email = new_email
 
     db.session.commit()
 
