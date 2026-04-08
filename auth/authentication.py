@@ -1,8 +1,10 @@
 from functools import wraps
+from uuid import UUID
+
 from flask import request, jsonify, g
 from firebase_admin import auth
 
-from models import db, Users
+from models import db, Users, ClientCoaches
 
 def require_auth(f):
     @wraps(f)
@@ -35,7 +37,11 @@ def require_auth(f):
                 .first()
             )
             if g.user is None:
-                return jsonify({'error': 'This user has an account, but has not yet registered. If you are a frontend developer, call POST /users/register.'}), 401
+                return jsonify({'error': 'This user has an account, but has not yet registered.', 'hint': 'If you are a frontend developer, call POST /users/register.'}), 400
+
+            # Gets the clients that the authenticated user coaches
+            g.clients = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
+            g.clients_ids = [c.client_id for c in g.clients]
 
         return f(*args, **kwargs)
 

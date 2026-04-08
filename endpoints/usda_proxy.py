@@ -1,7 +1,6 @@
 import os
 
 import requests
-
 from auth.authentication import require_auth
 from flask import Blueprint, request
 
@@ -28,6 +27,5 @@ def get_food(fdc_id):
 
 
 def _build_endpoint(path):
-    # Do not import app here — app.py imports this module, which would cause a circular import.
-    key = os.getenv('DATA_GOV_KEY', '')
-    return BASE_URL + path + '?api_key=' + key
+    import app
+    return BASE_URL + path + '?api_key=' + app.DATA_GOV_KEY

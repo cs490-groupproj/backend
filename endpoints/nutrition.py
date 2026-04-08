@@ -1,5 +1,8 @@
+from uuid import UUID
+
 from models import *
 from auth.authentication import require_auth
+from auth.util import can_access_client_endpoint
 from flask import Blueprint, jsonify, request, g
 
 nutrition_blueprint = Blueprint('nutrition', __name__)
@@ -7,9 +10,18 @@ nutrition_blueprint = Blueprint('nutrition', __name__)
 @nutrition_blueprint.route('/plans/create', methods=['POST'])
 @require_auth
 def create_nutrition_plan():
-    user = g.user
+
+    user_id = request.json.get('user_id')
+    if user_id is None:
+        return jsonify({'error': 'user_id parameter must be included in request body'}), 400
+    else:
+        user_id = UUID(user_id)
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to modify this content'}), 401
+
     new_plan = MealPlans()
-    new_plan.user_id = user.user_id
+    new_plan.user_id = user_id
     db.session.add(new_plan)
     db.session.commit()
 
@@ -20,25 +32,28 @@ def create_nutrition_plan():
 @nutrition_blueprint.route('/plans/<meal_plan_id>')
 @require_auth
 def get_meal_plan(meal_plan_id):
-    user = g.user
+
     meal_plan = (db.session.query(MealPlans).outerjoin(MealPlanFoods).filter(MealPlans.meal_plan_id == meal_plan_id).first())
-    if meal_plan.user_id != user.user_id:
-        return jsonify({'error': 'You are not authorized to view this content'}), 401
-    else:
-        return jsonify({
-            'meal_plan_id': meal_plan.meal_plan_id,
-            'meal_plan_foods': [
-                {'fdcId': f.fdc_id} for f in meal_plan.meal_plan_foods
-            ]
-        }), 200
+    user_id = meal_plan.user_id
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 401
+
+    return jsonify({
+        'meal_plan_id': meal_plan.meal_plan_id,
+        'meal_plan_foods': [
+            {'fdcId': f.fdc_id} for f in meal_plan.meal_plan_foods
+        ]
+    }), 200
 
 @nutrition_blueprint.route('/plans/<meal_plan_id>/add_food', methods=['POST'])
 @require_auth
 def add_food(meal_plan_id):
-    user = g.user
-    meal_plan = (
-        db.session.query(MealPlans).outerjoin(MealPlanFoods).filter(MealPlans.meal_plan_id == meal_plan_id).first())
-    if meal_plan.user_id != user.user_id:
+
+    meal_plan = (db.session.query(MealPlans).outerjoin(MealPlanFoods).filter(MealPlans.meal_plan_id == meal_plan_id).first())
+    user_id = meal_plan.user_id
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to modify this content'}), 401
 
     meal_plan_foods = MealPlanFoods()
@@ -53,15 +68,16 @@ def add_food(meal_plan_id):
 @nutrition_blueprint.route('/plans/<meal_plan_id>/log_eaten', methods=['POST'])
 @require_auth
 def log_eaten(meal_plan_id):
-    user = g.user
-    meal_datetime = request.json['meal_date']
-    meal_plan = (db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first())
 
-    if meal_plan.user_id != user.user_id:
+    meal_plan = (db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first())
+    user_id = meal_plan.user_id
+
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to modify this content'}), 401
 
     meal = Meals()
-    meal.user_id = user.user_id
+    meal.user_id = user_id
     meal.meal_datetime = meal_plan.meal_datetime
     meal.meal_type = meal_plan.meal_type
     db.session.add(meal)
@@ -79,9 +95,13 @@ def plans_by_user():
 
     if user_id is None:
         return jsonify({'error': 'user_id parameter must be included in URL'}), 400
+    else:
+        user_id = UUID(user_id)
 
-    user = g.user
-    meal_plans = (db.session.query(MealPlans).filter(MealPlans.user_id == user.user_id).all())
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 401
+
+    meal_plans = (db.session.query(MealPlans).filter(MealPlans.user_id == user_id).all())
 
     return jsonify({
         'meal_plans': [{
