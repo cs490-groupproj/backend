@@ -104,7 +104,6 @@ def register_user():
     if is_coach is None:
         return jsonify({'error': 'JSON must include is_coach'}), 400
 
-    coach_cost = body.get('coach_cost')
     is_active = body.get('is_active', True)
 
     new_user = Users()
@@ -114,7 +113,6 @@ def register_user():
     new_user.email = email
     new_user.is_coach = _coerce_bool(is_coach)
     new_user.is_active = _coerce_bool(is_active)
-    new_user.coach_cost = int(coach_cost) if coach_cost is not None else None
 
     db.session.add(new_user)
     db.session.commit()
@@ -125,7 +123,6 @@ def register_user():
         'last_name': new_user.last_name,
         'email': new_user.email,
         'is_coach': new_user.is_coach,
-        'coach_cost': new_user.coach_cost,
         'is_active': new_user.is_active,
         'date_created': new_user.date_created.isoformat() if new_user.date_created else None,
     }), 201
@@ -246,10 +243,21 @@ def submit_coach_survey():
     if len(specialization) > 20:
         return jsonify({'error': 'specialization must be at most 20 characters'}), 400
 
+    coach_cost = body.get('coach_cost')
+    if coach_cost is not None:
+        try:
+            coach_cost = int(coach_cost)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'coach_cost must be an integer'}), 400
+        if coach_cost < 0:
+            return jsonify({'error': 'coach_cost must be >= 0'}), 400
+
     row = CoachSurveys()
     row.user_id = g.user.user_id
     row.specialization = specialization
     row.last_update = _now_naive_utc()
+    if coach_cost is not None:
+        g.user.coach_cost = coach_cost
 
     db.session.add(row)
     db.session.commit()
@@ -258,6 +266,7 @@ def submit_coach_survey():
         'coach_survey_id': row.coach_survey_id,
         'user_id': str(row.user_id),
         'specialization': row.specialization,
+        'coach_cost': g.user.coach_cost,
         'date_created': row.date_created.isoformat() if row.date_created else None,
         'last_update': row.last_update.isoformat() if row.last_update else None,
     }), 201
@@ -291,6 +300,19 @@ def patch_coach_survey():
             return jsonify({'error': 'specialization must be at most 20 characters'}), 400
         survey.specialization = spec
 
+    if 'coach_cost' in body:
+        coach_cost = body['coach_cost']
+        if coach_cost is None:
+            g.user.coach_cost = None
+        else:
+            try:
+                coach_cost = int(coach_cost)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'coach_cost must be an integer'}), 400
+            if coach_cost < 0:
+                return jsonify({'error': 'coach_cost must be >= 0'}), 400
+            g.user.coach_cost = coach_cost
+
     survey.last_update = _now_naive_utc()
     db.session.commit()
 
@@ -298,6 +320,7 @@ def patch_coach_survey():
         'coach_survey_id': survey.coach_survey_id,
         'user_id': str(survey.user_id),
         'specialization': survey.specialization,
+        'coach_cost': g.user.coach_cost,
         'date_created': survey.date_created.isoformat() if survey.date_created else None,
         'last_update': survey.last_update.isoformat() if survey.last_update else None,
     }), 200
