@@ -148,92 +148,6 @@ def get_me():
     }), 200
 
 
-@users_blueprint.route('/onboarding/submit_client_survey', methods=['POST'])
-@require_auth
-def submit_client_survey():
-    if db.session.query(ClientGoals).filter(ClientGoals.user_id == g.user.user_id).count() > 0:
-        return jsonify({
-            'error': 'A client survey already exists for this user. Use PATCH /users/onboarding/client_survey to update it.',
-        }), 409
-
-    body = request.get_json(silent=True) or {}
-    err, invalid = _validate_primary_goals_binary(body.get('primary_goals_binary'))
-    if invalid:
-        return err, 400
-
-    new_goal = ClientGoals()
-    new_goal.user_id = g.user.user_id
-    new_goal.primary_goals = body.get('primary_goals_binary')
-    new_goal.weight_goal = body.get('weight_goal') if body.get('weight_goal') is not None else body.get('weight')
-    new_goal.exercise_minutes_goal = body.get('exercise_minutes_goal') if body.get('exercise_minutes_goal') is not None else body.get('exercise_minutes')
-    new_goal.personal_goals = body.get('personal_goals')
-
-    new_goal.last_updated = _now_naive_utc()
-    g.user.is_client = True
-
-    db.session.add(new_goal)
-    db.session.commit()
-
-    return jsonify({
-        'user_survey_id': new_goal.user_survey_id,
-        'user_id': str(new_goal.user_id),
-        'primary_goals_binary': new_goal.primary_goals,
-        'weight_goal': new_goal.weight_goal,
-        'exercise_minutes_goal': new_goal.exercise_minutes_goal,
-        'personal_goals': new_goal.personal_goals,
-        'date_created': new_goal.date_created.isoformat() if new_goal.date_created else None,
-        'last_updated': new_goal.last_updated.isoformat() if new_goal.last_updated else None,
-    }), 201
-
-
-@users_blueprint.route('/onboarding/client_survey', methods=['PATCH'])
-@require_auth
-def patch_client_survey():
-    body = request.get_json(silent=True) or {}
-    survey = None
-    if (sid := body.get('user_survey_id')) is not None:
-        survey = db.session.query(ClientGoals).filter(ClientGoals.user_survey_id == sid).first()
-        if survey is None:
-            return jsonify({'error': 'Survey not found'}), 404
-        if survey.user_id != g.user.user_id:
-            return jsonify({'error': 'You are not authorized to modify this survey'}), 403
-    else:
-        survey = _latest_client_survey(g.user.user_id)
-        if survey is None:
-            return jsonify({'error': 'No client survey to update. Use POST /users/onboarding/submit_client_survey first.'}), 404
-
-    if 'primary_goals_binary' in body:
-        err, invalid = _validate_primary_goals_binary(body.get('primary_goals_binary'))
-        if invalid:
-            return err, 400
-        survey.primary_goals = body.get('primary_goals_binary')
-    if 'weight_goal' in body:
-        survey.weight_goal = body['weight_goal']
-    elif 'weight' in body:
-        survey.weight_goal = body['weight']
-    if 'exercise_minutes_goal' in body:
-        survey.exercise_minutes_goal = body['exercise_minutes_goal']
-    elif 'exercise_minutes' in body:
-        survey.exercise_minutes_goal = body['exercise_minutes']
-    if 'personal_goals' in body:
-        survey.personal_goals = body['personal_goals']
-
-    survey.last_updated = _now_naive_utc()
-    g.user.is_client = True
-    db.session.commit()
-
-    return jsonify({
-        'user_survey_id': survey.user_survey_id,
-        'user_id': str(survey.user_id),
-        'primary_goals_binary': survey.primary_goals,
-        'weight_goal': survey.weight_goal,
-        'exercise_minutes_goal': survey.exercise_minutes_goal,
-        'personal_goals': survey.personal_goals,
-        'date_created': survey.date_created.isoformat() if survey.date_created else None,
-        'last_updated': survey.last_updated.isoformat() if survey.last_updated else None,
-    }), 200
-
-
 @users_blueprint.route('/onboarding/submit_coach_survey', methods=['POST'])
 @require_auth
 def submit_coach_survey():
@@ -280,6 +194,7 @@ def submit_coach_survey():
     }), 201
 
 
+# NOTE: This will be moved to the coaches blueprint in the future
 @users_blueprint.route('/onboarding/coach_survey', methods=['PATCH'])
 @require_auth
 def patch_coach_survey():
