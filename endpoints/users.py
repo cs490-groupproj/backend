@@ -131,6 +131,12 @@ def register_user():
     }), 201
 
 
+@users_blueprint.route('/me', methods=['GET'])
+@require_auth
+def get_me():
+    return jsonify({'user_id': str(g.user.user_id)}), 200
+
+
 @users_blueprint.route('/onboarding/submit_client_survey', methods=['POST'])
 @require_auth
 def submit_client_survey():
