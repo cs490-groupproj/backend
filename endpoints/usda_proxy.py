@@ -1,6 +1,9 @@
+import os
+
 import requests
+
 from auth.authentication import require_auth
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, request
 
 usda_proxy_blueprint = Blueprint('proxy_usda', __name__)
 
@@ -25,5 +28,6 @@ def get_food(fdc_id):
 
 
 def _build_endpoint(path):
-    import app
-    return BASE_URL + path + '?api_key=' + app.DATA_GOV_KEY
+    key = os.getenv("DATA_GOV_KEY", "")
+    return BASE_URL + path + "?api_key=" + key
+

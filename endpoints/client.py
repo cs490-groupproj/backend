@@ -8,6 +8,31 @@ from datetime import date
 
 client_blueprint = Blueprint('client_blueprint', __name__)
 
+@client_blueprint.route('/<user_id>/coaches')
+@require_auth
+def coaches(user_id):
+    user = g.user
+
+    try:
+        user_id = UUID(user_id)
+    except (ValueError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if user.user_id != user_id:
+        return jsonify({'error': 'You are not authorized to view this content'}), 401
+
+    relationships = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == user_id)
+
+    return jsonify({
+        'coaches': [{
+            'id': r.coach_id,
+            'first_name': r.coach.first_name,
+            'last_name': r.coach.last_name
+        } for r in relationships]
+    })
+
+
+
 @client_blueprint.route('/<user_id>/current_goals')
 @require_auth
 def get_current_goals(user_id):
@@ -23,7 +48,8 @@ def get_current_goals(user_id):
         'exercise_minutes_goal': current_goals.exercise_minutes_goal,
         'personal_goals': current_goals.personal_goals,
         'date_created': current_goals.date_created
-    }), 200
+    }), 200 
+
 
 # Primary goals are stored as a binary string where the digits at each offset represent:
 # 0: Lose weight
