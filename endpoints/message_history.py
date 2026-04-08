@@ -22,7 +22,7 @@ def unread_messages():
 @require_auth
 def mark_received():
     user_id = g.user.user_id
-    other_party_user_id = request.args.get('other_party_user_id')
+    other_party_user_id = request.json.get('other_party_user_id')
 
     other_party_user_id = UUID(other_party_user_id)
 
@@ -57,10 +57,11 @@ def get_message_history():
         )
     ).order_by(Messages.sent_date.desc()).limit(limit).offset(offset).all()
 
-    return jsonify([{
+    return jsonify({
+        'messages': [{
         'message_sender': m.message_sender,
         'message_recipient': m.message_recipient,
         'message_body': m.message_body,
         'sent_date': m.sent_date,
         'read_by_recipient': m.read,
-    } for m in messages]), 200
+    } for m in messages]}), 200
