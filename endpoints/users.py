@@ -103,6 +103,14 @@ def register_user():
     is_coach = body.get('is_coach')
     if is_coach is None:
         return jsonify({'error': 'JSON must include is_coach'}), 400
+    is_coach = _coerce_bool(is_coach)
+    if 'is_client' in body:
+        is_client = _coerce_bool(body.get('is_client'))
+        # Initial registration must choose exactly one role.
+        if is_client == is_coach:
+            return jsonify({'error': 'At registration, exactly one of is_coach or is_client must be true'}), 400
+    else:
+        is_client = not is_coach
 
     is_active = body.get('is_active', True)
 
@@ -111,7 +119,8 @@ def register_user():
     new_user.first_name = first_name
     new_user.last_name = last_name
     new_user.email = email
-    new_user.is_coach = _coerce_bool(is_coach)
+    new_user.is_coach = is_coach
+    new_user.is_client = is_client
     new_user.is_active = _coerce_bool(is_active)
 
     db.session.add(new_user)
@@ -123,6 +132,7 @@ def register_user():
         'last_name': new_user.last_name,
         'email': new_user.email,
         'is_coach': new_user.is_coach,
+        'is_client': new_user.is_client,
         'is_active': new_user.is_active,
         'date_created': new_user.date_created.isoformat() if new_user.date_created else None,
     }), 201
@@ -131,15 +141,16 @@ def register_user():
 @users_blueprint.route('/me', methods=['GET'])
 @require_auth
 def get_me():
-    return jsonify({'user_id': str(g.user.user_id)}), 200
+    return jsonify({
+        'user_id': str(g.user.user_id),
+        'is_coach': g.user.is_coach,
+        'is_client': g.user.is_client,
+    }), 200
 
 
 @users_blueprint.route('/onboarding/submit_client_survey', methods=['POST'])
 @require_auth
 def submit_client_survey():
-    if g.user.is_coach:
-        return jsonify({'error': 'Client onboarding survey is only for clients (is_coach must be false)'}), 403
-
     if db.session.query(ClientGoals).filter(ClientGoals.user_id == g.user.user_id).count() > 0:
         return jsonify({
             'error': 'A client survey already exists for this user. Use PATCH /users/onboarding/client_survey to update it.',
@@ -158,6 +169,7 @@ def submit_client_survey():
     new_goal.personal_goals = body.get('personal_goals')
 
     new_goal.last_updated = _now_naive_utc()
+    g.user.is_client = True
 
     db.session.add(new_goal)
     db.session.commit()
@@ -177,9 +189,6 @@ def submit_client_survey():
 @users_blueprint.route('/onboarding/client_survey', methods=['PATCH'])
 @require_auth
 def patch_client_survey():
-    if g.user.is_coach:
-        return jsonify({'error': 'Client survey updates are only for clients'}), 403
-
     body = request.get_json(silent=True) or {}
     survey = None
     if (sid := body.get('user_survey_id')) is not None:
@@ -210,6 +219,7 @@ def patch_client_survey():
         survey.personal_goals = body['personal_goals']
 
     survey.last_updated = _now_naive_utc()
+    g.user.is_client = True
     db.session.commit()
 
     return jsonify({
@@ -227,9 +237,6 @@ def patch_client_survey():
 @users_blueprint.route('/onboarding/submit_coach_survey', methods=['POST'])
 @require_auth
 def submit_coach_survey():
-    if not g.user.is_coach:
-        return jsonify({'error': 'Coach onboarding survey is only for coaches'}), 403
-
     if db.session.query(CoachSurveys).filter(CoachSurveys.user_id == g.user.user_id).count() > 0:
         return jsonify({
             'error': 'A coach survey already exists. Use PATCH /users/onboarding/coach_survey to update it.',
@@ -256,6 +263,7 @@ def submit_coach_survey():
     row.user_id = g.user.user_id
     row.specialization = specialization
     row.last_update = _now_naive_utc()
+    g.user.is_coach = True
     if coach_cost is not None:
         g.user.coach_cost = coach_cost
 
@@ -275,9 +283,6 @@ def submit_coach_survey():
 @users_blueprint.route('/onboarding/coach_survey', methods=['PATCH'])
 @require_auth
 def patch_coach_survey():
-    if not g.user.is_coach:
-        return jsonify({'error': 'Coach survey updates are only for coaches'}), 403
-
     body = request.get_json(silent=True) or {}
     survey = None
     if (sid := body.get('coach_survey_id')) is not None:
@@ -314,6 +319,7 @@ def patch_coach_survey():
             g.user.coach_cost = coach_cost
 
     survey.last_update = _now_naive_utc()
+    g.user.is_coach = True
     db.session.commit()
 
     return jsonify({
@@ -340,6 +346,7 @@ def get_user_profile(user_id):
         'last_name': u.last_name,
         'email': u.email,
         'is_coach': u.is_coach,
+        'is_client': u.is_client,
         'coach_cost': u.coach_cost,
         'is_active': u.is_active,
         'date_created': u.date_created.isoformat() if u.date_created else None,
@@ -354,6 +361,9 @@ def get_user_profile(user_id):
             'last_update': cs.last_update.isoformat() if cs.last_update else None,
         }
     else:
+        payload['coach_survey'] = None
+
+    if u.is_client:
         cg = _latest_client_survey(u.user_id)
         payload['client_goals'] = None if cg is None else {
             'user_survey_id': cg.user_survey_id,
@@ -364,6 +374,8 @@ def get_user_profile(user_id):
             'date_created': cg.date_created.isoformat() if cg.date_created else None,
             'last_updated': cg.last_updated.isoformat() if cg.last_updated else None,
         }
+    else:
+        payload['client_goals'] = None
 
     return jsonify(payload), 200
 
