@@ -107,6 +107,7 @@ class Users(db.Model):
     last_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     is_coach = db.Column(Boolean, nullable=False)
+    is_client = db.Column(Boolean, nullable=False)
     is_active = db.Column(Boolean, nullable=False)
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     coach_cost = db.Column(Integer)
@@ -282,6 +283,7 @@ class Messages(db.Model):
     message_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     message_sender = db.Column(Uuid, nullable=False)
     message_recipient = db.Column(Uuid, nullable=False)
+    read = db.Column(Boolean, nullable=False)
     message_body = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     sent_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
 
