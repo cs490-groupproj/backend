@@ -16,6 +16,7 @@ from endpoints.client import client_blueprint
 from endpoints.message_history import message_blueprint
 from endpoints.nutrition import nutrition_blueprint
 from endpoints.usda_proxy import usda_proxy_blueprint
+from endpoints.users import users_blueprint
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.join(base_dir, 'secrets', '.env')
@@ -38,6 +39,7 @@ db.init_app(app)
 app.register_blueprint(client_blueprint, url_prefix='/clients')
 app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
 app.register_blueprint(usda_proxy_blueprint, url_prefix='/proxy/usda')
+app.register_blueprint(users_blueprint, url_prefix='/users')
 app.register_blueprint(message_blueprint, url_prefix='/messages')
 
 init_firebase()
