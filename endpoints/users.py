@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request, g
 users_blueprint = Blueprint('users_blueprint', __name__)
 
 _PRIMARY_GOALS_BINARY_CHARS = {'0', '1'}
+_COACH_QUALIFICATIONS_MAX_LEN = 1000
 
 
 def _coerce_bool(value):
@@ -84,6 +85,15 @@ def _latest_coach_survey(user_id):
 
 def _now_naive_utc():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _validate_optional_qualifications(value):
+    if value is None:
+        return None, None
+    text_value = str(value).strip()
+    if len(text_value) > _COACH_QUALIFICATIONS_MAX_LEN:
+        return None, jsonify({'error': f'qualifications must be at most {_COACH_QUALIFICATIONS_MAX_LEN} characters'})
+    return text_value, None
 
 
 @users_blueprint.route('/register', methods=['POST'])
@@ -165,6 +175,10 @@ def submit_coach_survey():
     if len(specialization) > 20:
         return jsonify({'error': 'specialization must be at most 20 characters'}), 400
 
+    qualifications, q_err = _validate_optional_qualifications(body.get('qualifications'))
+    if q_err is not None:
+        return q_err, 400
+
     coach_cost = body.get('coach_cost')
     if coach_cost is not None:
         try:
@@ -177,6 +191,7 @@ def submit_coach_survey():
     row = CoachSurveys()
     row.user_id = g.user.user_id
     row.specialization = specialization
+    row.qualifications = qualifications
     row.last_update = _now_naive_utc()
     g.user.is_coach = True
     if coach_cost is not None:
@@ -189,6 +204,7 @@ def submit_coach_survey():
         'coach_survey_id': row.coach_survey_id,
         'user_id': str(row.user_id),
         'specialization': row.specialization,
+        'qualifications': row.qualifications,
         'coach_cost': g.user.coach_cost,
         'date_created': row.date_created.isoformat() if row.date_created else None,
         'last_update': row.last_update.isoformat() if row.last_update else None,
@@ -221,6 +237,12 @@ def patch_coach_survey():
             return jsonify({'error': 'specialization must be at most 20 characters'}), 400
         survey.specialization = spec
 
+    if 'qualifications' in body:
+        qualifications, q_err = _validate_optional_qualifications(body.get('qualifications'))
+        if q_err is not None:
+            return q_err, 400
+        survey.qualifications = qualifications
+
     if 'coach_cost' in body:
         coach_cost = body['coach_cost']
         if coach_cost is None:
@@ -242,6 +264,7 @@ def patch_coach_survey():
         'coach_survey_id': survey.coach_survey_id,
         'user_id': str(survey.user_id),
         'specialization': survey.specialization,
+        'qualifications': survey.qualifications,
         'coach_cost': g.user.coach_cost,
         'date_created': survey.date_created.isoformat() if survey.date_created else None,
         'last_update': survey.last_update.isoformat() if survey.last_update else None,
@@ -273,6 +296,7 @@ def get_user_profile(user_id):
         payload['coach_survey'] = None if cs is None else {
             'coach_survey_id': cs.coach_survey_id,
             'specialization': cs.specialization,
+            'qualifications': cs.qualifications,
             'date_created': cs.date_created.isoformat() if cs.date_created else None,
             'last_update': cs.last_update.isoformat() if cs.last_update else None,
         }
