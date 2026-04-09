@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from firebase_admin import auth
-from flask_socketio import disconnect, join_room, emit
+from flask_socketio import disconnect, join_room, leave_room, emit
 from flask import request, session
 from sqlalchemy import or_, and_
 
@@ -86,6 +86,10 @@ def on_join(data):
         disconnect()
         print('disconnect bad relationship')
         return None
+
+    old_room = session.get('room')
+    if old_room:
+        leave_room(old_room)
 
     room = f'chat_{min(relationship.client_id, relationship.coach_id)}_{max(relationship.client_id, relationship.coach_id)}'
     session['room'] = room
