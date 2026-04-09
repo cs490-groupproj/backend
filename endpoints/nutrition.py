@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from models import *
@@ -13,14 +14,20 @@ def create_nutrition_plan():
 
     user_id = request.json.get('user_id')
     meal_type_id = request.json.get('meal_type_id')
+    meal_datetime = request.json.get('meal_datetime')
 
-    if user_id is None or meal_type_id is None:
+    if user_id is None or meal_type_id is None or meal_datetime is None:
         return jsonify({'error': 'user_id and meal_type_id parameters must be included in request body'}), 400
     else:
         user_id = UUID(user_id)
 
     if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to modify this content'}), 401
+
+    try:
+        meal_datetime = datetime.fromisoformat(meal_datetime)
+    except (ValueError, AttributeError):
+        return jsonify({'error': 'Invalid datetime format'}), 400
 
     try:
         int(meal_type_id)
@@ -40,6 +47,7 @@ def create_nutrition_plan():
     new_plan = MealPlans()
     new_plan.user_id = user_id
     new_plan.meal_type_id = meal_type_id
+    new_plan.meal_datetime = meal_datetime
     db.session.add(new_plan)
     db.session.commit()
 
