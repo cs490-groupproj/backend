@@ -47,12 +47,16 @@ def create_nutrition_plan():
     new_plan = MealPlans()
     new_plan.user_id = user_id
     new_plan.meal_type_id = meal_type_id
+    new_plan.eaten = False
     new_plan.meal_datetime = meal_datetime
     db.session.add(new_plan)
     db.session.commit()
 
     return jsonify({
         'meal_plan_id': new_plan.meal_plan_id,
+        'meal_type_id': new_plan.meal_type_id,
+        'meal_datetime': str(new_plan.meal_datetime),
+        'eaten': str(new_plan.eaten).lower(),
     }), 201
 
 @nutrition_blueprint.route('/plans/<meal_plan_id>')
