@@ -211,6 +211,7 @@ class CoachSurveys(db.Model):
     coach_survey_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     user_id = db.Column(Uuid, nullable=False)
     specialization = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    qualifications = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     last_update = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
 

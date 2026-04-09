@@ -1,12 +1,57 @@
+from datetime import date, datetime, timezone
 from enum import Enum
 from uuid import UUID
 
 from models import *
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
-from datetime import date
 
 client_blueprint = Blueprint('client_blueprint', __name__)
+
+_PRIMARY_GOALS_BINARY_CHARS = {'0', '1'}
+
+
+def _validate_primary_goals_binary(value):
+    if value is None:
+        return None, False
+    if len(value) != 6 or not set(value).issubset(_PRIMARY_GOALS_BINARY_CHARS):
+        return jsonify({
+            'error': 'Primary goals are not valid. Use a 6-character string of 0 and 1.',
+            'hint': {
+                'string': '110000',
+                'meaning': 'represents offset 0 and 1 as selected',
+                'offset_key': {
+                    0: 'Lose Weight',
+                    1: 'Build Muscle',
+                    2: 'Increase Strength',
+                    3: 'Improve Endurance',
+                    4: 'General Fitness',
+                    5: 'Sports Performance',
+                },
+            },
+        }), True
+    return None, False
+
+
+def _latest_client_survey(user_id):
+    return (
+        db.session.query(ClientGoals)
+        .filter(ClientGoals.user_id == user_id)
+        .order_by(ClientGoals.date_created.desc())
+        .first()
+    )
+
+
+def _now_naive_utc():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _require_client_role():
+    # Dual-role users are valid here; the only disallowed case is not-a-client.
+    if not bool(getattr(g.user, 'is_client', False)):
+        return jsonify({'error': 'Client survey endpoints are only for users with is_client=true'}), 403
+    return None
+
 
 @client_blueprint.route('/<user_id>/coaches')
 @require_auth
@@ -36,19 +81,31 @@ def coaches(user_id):
 @client_blueprint.route('/<user_id>/current_goals')
 @require_auth
 def get_current_goals(user_id):
-    user = g.user
-    current_goals = (db.session.query(ClientGoals).filter(ClientGoals.user_id == user_id).order_by(ClientGoals.date_created.desc()).first())
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
 
-    if current_goals.user_id != user.user_id:
-        return jsonify([{'error': 'You are not authorized to view this content'}]), 401
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to view this content'}), 403
+
+    current_goals = _latest_client_survey(g.user.user_id)
+    if current_goals is None:
+        return jsonify({'error': 'No client survey found for this user'}), 404
 
     return jsonify({
+        'user_survey_id': current_goals.user_survey_id,
         'primary_goals_binary': current_goals.primary_goals,
         'weight_goal': current_goals.weight_goal,
         'exercise_minutes_goal': current_goals.exercise_minutes_goal,
         'personal_goals': current_goals.personal_goals,
-        'date_created': current_goals.date_created
-    }), 200 
+        'date_created': current_goals.date_created.isoformat() if current_goals.date_created else None,
+        'last_updated': current_goals.last_updated.isoformat() if current_goals.last_updated else None,
+    }), 200
 
 
 # Primary goals are stored as a binary string where the digits at each offset represent:
@@ -63,136 +120,127 @@ def get_current_goals(user_id):
 @client_blueprint.route('/<user_id>/initial_goal_survey', methods=['POST'])
 @require_auth
 def add_initial_goals(user_id):
-    user = g.user
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
 
-    if db.session.query(ClientGoals).filter(ClientGoals.user_id == user_id).count() > 0:
-        return jsonify([{'error': 'User already has completed the initial goal survey.'}]), 403
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to create this content'}), 403
+
+    if db.session.query(ClientGoals).filter(ClientGoals.user_id == g.user.user_id).count() > 0:
+        return jsonify({'error': 'User already has completed the initial goal survey.'}), 409
+
+    body = request.get_json(silent=True) or {}
+    err, invalid = _validate_primary_goals_binary(body.get('primary_goals_binary'))
+    if invalid:
+        return err, 400
 
     new_goal = ClientGoals()
-
-    if UUID(user_id) != user.user_id:
-        return jsonify([{'error': 'You are not authorized to create this content'}]), 401
-
-    new_goal.user_id = UUID(user_id)
-
-    binary_chars = {'0', '1'}
-    if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
-        if len(new_primary_goals) != 6 or not set(new_primary_goals).issubset(binary_chars):
-            return jsonify([{
-                'error': 'Primary goals are not valid. Use the primary goal binary system to refer to your goals.',
-                'hint': {
-                    'string': '110000',
-                    'meaning': 'represents offset 0 and 1 as selected',
-                    'offset_key': {
-                        0: 'Lose Weight',
-                        1: 'Build Muscle',
-                        2: 'Increase Strength',
-                        3: 'Improve Endurance',
-                        4: 'General Fitness',
-                        5: 'Sports Performance',
-
-                    }
-                }
-            }]), 401
-        else:
-            new_goal.primary_goals = new_primary_goals
-
-    if (new_weight := request.json.get('weight')) is not None:
-        new_goal.weight_goal = new_weight
-    if (new_exercise_minutes := request.json.get('exercise_minutes')) is not None:
-        new_goal.exercise_minutes_goal = new_exercise_minutes
-    if (new_personal_goals := request.json.get('personal_goals')) is not None:
-        new_goal.personal_goals = new_personal_goals
+    new_goal.user_id = g.user.user_id
+    new_goal.primary_goals = body.get('primary_goals_binary')
+    new_goal.weight_goal = body.get('weight_goal') if body.get('weight_goal') is not None else body.get('weight')
+    new_goal.exercise_minutes_goal = body.get('exercise_minutes_goal') if body.get('exercise_minutes_goal') is not None else body.get('exercise_minutes')
+    new_goal.personal_goals = body.get('personal_goals')
+    new_goal.last_updated = _now_naive_utc()
 
     db.session.add(new_goal)
     db.session.commit()
 
     return jsonify({
+        'user_survey_id': new_goal.user_survey_id,
         'primary_goals_binary': new_goal.primary_goals,
         'weight_goal': new_goal.weight_goal,
         'exercise_minutes_goal': new_goal.exercise_minutes_goal,
         'personal_goals': new_goal.personal_goals,
-        'date_created': new_goal.date_created
-    }), 200
+        'date_created': new_goal.date_created.isoformat() if new_goal.date_created else None,
+        'last_updated': new_goal.last_updated.isoformat() if new_goal.last_updated else None,
+    }), 201
 
 
 @client_blueprint.route('/<user_id>/edit_goals', methods=['PATCH'])
 @require_auth
 def edit_goals(user_id):
-    user = g.user
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
 
-    old_goal = (db.session.query(ClientGoals).filter(ClientGoals.user_id == user_id).order_by(ClientGoals.date_created.desc()).first())
-    new_goal = ClientGoals()
-    new_goal.user_id = UUID(user_id)
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
 
-    if old_goal.user_id != user.user_id:
-        return jsonify([{'error': 'You are not authorized to modify this content'}]), 401
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to modify this content'}), 403
 
-    if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
-        binary_chars = {'0', '1'}
-        if (new_primary_goals := request.json.get('primary_goals_binary')) is not None:
-            if len(new_primary_goals) != 6 or not set(new_primary_goals).issubset(binary_chars):
-                return jsonify([{
-                    'error': 'Primary goals are not valid. Use the primary goal binary system to refer to your goals.',
-                    'hint': {
-                        'string': '110000',
-                        'meaning': 'represents offset 0 and 1 as selected',
-                        'offset_key': {
-                            0: 'Lose Weight',
-                            1: 'Build Muscle',
-                            2: 'Increase Strength',
-                            3: 'Improve Endurance',
-                            4: 'General Fitness',
-                            5: 'Sports Performance',
+    body = request.get_json(silent=True) or {}
+    survey = _latest_client_survey(g.user.user_id)
+    if survey is None:
+        return jsonify({'error': 'No client survey to update. Use POST /clients/<user_id>/initial_goal_survey first.'}), 404
 
-                        }
-                    }
-                }]), 401
-            else:
-                new_goal.primary_goals = new_primary_goals
-    else:
-        new_primary_goals.primary_goals = old_goal.primary_goals
+    if 'primary_goals_binary' in body:
+        err, invalid = _validate_primary_goals_binary(body.get('primary_goals_binary'))
+        if invalid:
+            return err, 400
+        survey.primary_goals = body.get('primary_goals_binary')
+    if 'weight_goal' in body:
+        survey.weight_goal = body['weight_goal']
+    elif 'weight' in body:
+        survey.weight_goal = body['weight']
+    if 'exercise_minutes_goal' in body:
+        survey.exercise_minutes_goal = body['exercise_minutes_goal']
+    elif 'exercise_minutes' in body:
+        survey.exercise_minutes_goal = body['exercise_minutes']
+    if 'personal_goals' in body:
+        survey.personal_goals = body['personal_goals']
 
-    if (new_weight := request.json.get('weight')) is not None:
-        new_goal.weight_goal = new_weight
-    else:
-        new_goal.weight_goal = old_goal.weight_goal
-
-    if (new_exercise_minutes := request.json.get('exercise_minutes')) is not None:
-        new_goal.exercise_minutes_goal = new_exercise_minutes
-
-    if (new_personal_goals := request.json.get('personal_goals')) is not None:
-        new_goal.personal_goals = new_personal_goals
-    else:
-        new_goal.personal_goals = old_goal.personal_goals
-
-    db.session.add(new_goal)
+    survey.last_updated = _now_naive_utc()
     db.session.commit()
 
     return jsonify({
-        'primary_goals_binary': new_goal.primary_goals,
-        'weight_goal': new_goal.weight_goal,
-        'exercise_minutes_goal': new_goal.exercise_minutes_goal,
-        'personal_goals': new_personal_goals,
+        'user_survey_id': survey.user_survey_id,
+        'primary_goals_binary': survey.primary_goals,
+        'weight_goal': survey.weight_goal,
+        'exercise_minutes_goal': survey.exercise_minutes_goal,
+        'personal_goals': survey.personal_goals,
+        'date_created': survey.date_created.isoformat() if survey.date_created else None,
+        'last_updated': survey.last_updated.isoformat() if survey.last_updated else None,
     }), 200
 
 
 @client_blueprint.route('/<user_id>/historical_goals')
 @require_auth
 def get_goals(user_id):
-    user = g.user
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
+
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to view this content'}), 403
+
     limit = request.args.get('limit', type=int)
-    all_goals = (db.session.query(ClientGoals).filter(ClientGoals.user_id == user_id).order_by(ClientGoals.date_created.desc()).limit(limit).all())
-    for goal in all_goals:
-        if goal.user_id != user.user_id:
-            return jsonify([{'error': 'You are not authorized to view this content'}]), 401
+    q = db.session.query(ClientGoals).filter(ClientGoals.user_id == g.user.user_id).order_by(ClientGoals.date_created.desc())
+    if limit is not None:
+        q = q.limit(limit)
+    all_goals = q.all()
 
     return jsonify([{
+        'user_survey_id': g.user_survey_id,
         'primary_goals_binary': g.primary_goals,
         'weight_goal': g.weight_goal,
         'exercise_minutes_goal': g.exercise_minutes_goal,
         'personal_goals': g.personal_goals,
-        'date_created': g.date_created
+        'date_created': g.date_created.isoformat() if g.date_created else None,
+        'last_updated': g.last_updated.isoformat() if g.last_updated else None,
     } for g in all_goals]), 200
 
 @client_blueprint.route('/<user_id>/daily_survey/')
