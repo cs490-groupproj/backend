@@ -12,16 +12,34 @@ nutrition_blueprint = Blueprint('nutrition', __name__)
 def create_nutrition_plan():
 
     user_id = request.json.get('user_id')
-    if user_id is None:
-        return jsonify({'error': 'user_id parameter must be included in request body'}), 400
+    meal_type_id = request.json.get('meal_type_id')
+
+    if user_id is None or meal_type_id is None:
+        return jsonify({'error': 'user_id and meal_type_id parameters must be included in request body'}), 400
     else:
         user_id = UUID(user_id)
 
     if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to modify this content'}), 401
 
+    try:
+        int(meal_type_id)
+        if meal_type_id < 1 or meal_type_id > 4:
+            raise ValueError
+    except ValueError:
+        return jsonify({
+            'error': 'meal_type_id parameter must be an integer 1-4',
+            'guide': {
+                1: 'Breakfast',
+                2: 'Lunch',
+                3: 'Dinner',
+                4: 'Snack'
+            }
+        }), 400
+
     new_plan = MealPlans()
     new_plan.user_id = user_id
+    new_plan.meal_type_id = meal_type_id
     db.session.add(new_plan)
     db.session.commit()
 
@@ -41,6 +59,7 @@ def get_meal_plan(meal_plan_id):
 
     return jsonify({
         'meal_plan_id': meal_plan.meal_plan_id,
+        'meal_type_id': meal_plan.meal_type_id,
         'meal_plan_foods': [
             {'fdcId': f.fdc_id} for f in meal_plan.meal_plan_foods
         ]
@@ -58,7 +77,6 @@ def add_food(meal_plan_id):
 
     meal_plan_foods = MealPlanFoods()
     meal_plan_foods.meal_plan_id = meal_plan_id
-    meal_plan_foods.meal_type = request.json['meal_type_id']
     meal_plan_foods.fdc_id = request.json['fdc_id']
     db.session.add(meal_plan_foods)
     db.session.commit()
