@@ -102,15 +102,12 @@ def log_eaten(meal_plan_id):
     if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to modify this content'}), 401
 
-    meal = Meals()
-    meal.user_id = user_id
-    meal.meal_datetime = meal_plan.meal_datetime
-    meal.meal_type = meal_plan.meal_type
-    db.session.add(meal)
+    meal_plan.eaten = True
+
     db.session.commit()
 
     return jsonify({
-        'meal_id': meal.meal_id,
+        'meal_plan_id': meal_plan.meal_plan_id,
     }), 200
 
 

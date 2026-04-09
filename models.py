@@ -62,6 +62,7 @@ class MealPlans(db.Model):
     meal_datetime = db.Column(DateTime, nullable=False)
     meal_type_id = db.Column(Integer, nullable=False)
     user_id = db.Column(Uuid, nullable=False)
+    eaten = db.Column(Boolean, nullable=False)
     created_dt = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
 
@@ -93,7 +94,6 @@ class MealTypes(db.Model):
     meal_type_id = db.Column(Integer, primary_key=True)
     meal_name = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'))
 
-    meals = db.relationship('Meals', back_populates='meal_type')
     meal_plans = db.relationship('MealPlans', back_populates='meal_type')
 
 
@@ -120,7 +120,6 @@ class Users(db.Model):
     coach_surveys = db.relationship('CoachSurveys', back_populates='user')
     daily_survey_responses = db.relationship('DailySurveyResponses', back_populates='user')
     meal_plans = db.relationship('MealPlans', back_populates='user')
-    meals = db.relationship('Meals', back_populates='user')
     messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
     messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
     notifications = db.relationship('Notifications', back_populates='users')
@@ -254,26 +253,6 @@ class Exercises(db.Model):
     workout_exercises = db.relationship('WorkoutExercises', back_populates='exercise')
 
 
-class Meals(db.Model):
-    __tablename__ = 'meals'
-    __table_args__ = (
-        ForeignKeyConstraint(['meal_type_id'], ['meal_types.meal_type_id'], name='FK_Meals_MealTypeId'),
-        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_Users_UserId'),
-        PrimaryKeyConstraint('meal_id', name='PK__meals__2910B00FB4D19984')
-    )
-
-    meal_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
-    user_id = db.Column(Uuid, nullable=False)
-    meal_datetime = db.Column(DateTime, nullable=False)
-    meal_type_id = db.Column(Integer, nullable=False)
-    created_dt = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
-    last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
-
-    meal_type = db.relationship('MealTypes', back_populates='meals')
-    user = db.relationship('Users', back_populates='meals')
-    meal_foods = db.relationship('MealFoods', back_populates='meal')
-
-
 class Messages(db.Model):
     __tablename__ = 'messages'
     __table_args__ = (
@@ -355,20 +334,6 @@ class WorkoutPlans(db.Model):
     workout_type = db.relationship('WorkoutTypes', back_populates='workout_plans')
     workout_plan_exercises = db.relationship('WorkoutPlanExercises', back_populates='workout_plan')
     workouts = db.relationship('Workouts', back_populates='workout_plan')
-
-
-class MealFoods(db.Model):
-    __tablename__ = 'meal_foods'
-    __table_args__ = (
-        ForeignKeyConstraint(['meal_id'], ['meals.meal_id'], ondelete='CASCADE', name='FK_MealFoods_MealId'),
-        PrimaryKeyConstraint('meal_food_id', name='PK__meal_foo__3F8CC28374B66045')
-    )
-
-    meal_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
-    meal_id = db.Column(Integer, nullable=False)
-    fdc_id = db.Column(Integer, nullable=False)
-
-    meal = db.relationship('Meals', back_populates='meal_foods')
 
 
 class WorkoutPlanExercises(db.Model):
