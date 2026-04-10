@@ -2,6 +2,8 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 import os
+import traceback
+import sys
 from flask_socketio import SocketIO
 
 from dotenv import load_dotenv
@@ -59,6 +61,27 @@ def hello_world():  # put application's code here
 @require_auth
 def auth_required():
     return jsonify({'message': f'You have successfully authenticated, {g.firebase_user.get("email")}. Your name is {g.user.first_name}'}), 200
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'message': 'That resource cannot be found'}), 404
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({'message': 'HTTP method is not allowed on that resource'}), 405
+
+@app.errorhandler(418)
+def im_a_teapot(e):
+    return jsonify({'message': 'You have attempted to brew coffee with a teapot. Why?'}), 418
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    tb = traceback.extract_tb(sys.exc_info()[2])[-1]
+    return jsonify({
+        'message': f'An internal error occurred. Please try again later.',
+        'internal_error': traceback.format_exc().splitlines()[-1],
+        'location': f'{tb.filename}:{tb.lineno} in {tb.name}'
+    }), 500
 
 
 if __name__ == '__main__':
