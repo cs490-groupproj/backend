@@ -377,6 +377,7 @@ class Workouts(db.Model):
     title = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     workout_type_id = db.Column(Integer)
     workout_plan_id = db.Column(Integer)
+    schedule_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
 
     user = db.relationship('Users', back_populates='workouts')
     workout_plan = db.relationship('WorkoutPlans', back_populates='workouts')
