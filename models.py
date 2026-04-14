@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Boolean, DECIMAL, Date, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Uuid, text
+from sqlalchemy import Boolean, DECIMAL, Date, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Time, Uuid, text
 
 db = SQLAlchemy()
 
@@ -330,11 +330,17 @@ class WorkoutPlans(db.Model):
     workout_type_id = db.Column(Integer)
     description = db.Column(String(1000, 'SQL_Latin1_General_CP1_CI_AS'))
     created_by = db.Column(Uuid)
+    duration_min = db.Column(Integer)
 
     users = db.relationship('Users', back_populates='workout_plans')
     workout_type = db.relationship('WorkoutTypes', back_populates='workout_plans')
-    workout_plan_exercises = db.relationship('WorkoutPlanExercises', back_populates='workout_plan')
+    workout_plan_exercises = db.relationship(
+        'WorkoutPlanExercises',
+        back_populates='workout_plan',
+        passive_deletes=True,
+    )
     workouts = db.relationship('Workouts', back_populates='workout_plan')
+    workout_plan_days = db.relationship('WorkoutPlanDays', back_populates='workout_plan')
 
 
 class WorkoutPlanExercises(db.Model):
@@ -363,6 +369,21 @@ class WorkoutPlanExercises(db.Model):
     workout_plan = db.relationship('WorkoutPlans', back_populates='workout_plan_exercises')
 
 
+class WorkoutPlanDays(db.Model):
+    __tablename__ = 'workout_plan_days'
+    __table_args__ = (
+        ForeignKeyConstraint(['workout_plan_id'], ['workout_plans.workout_plan_id'], name='FK_WorkoutPlanDays_WorkoutPlanId'),
+        PrimaryKeyConstraint('id', name='PK_workout_plan_days')
+    )
+
+    id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    workout_plan_id = db.Column(Integer, nullable=False)
+    weekday = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    schedule_time = db.Column(Time, nullable=False)
+
+    workout_plan = db.relationship('WorkoutPlans', back_populates='workout_plan_days')
+
+
 class Workouts(db.Model):
     __tablename__ = 'workouts'
     __table_args__ = (
@@ -377,7 +398,7 @@ class Workouts(db.Model):
     title = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     workout_type_id = db.Column(Integer)
     workout_plan_id = db.Column(Integer)
-    schedule_date = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    completion_date = db.Column(DateTime)
 
     user = db.relationship('Users', back_populates='workouts')
     workout_plan = db.relationship('WorkoutPlans', back_populates='workouts')
