@@ -56,7 +56,8 @@ jobs:
           mkdir secrets
           echo '${{ secrets.FIREBASE_CREDENTIALS }}' > secrets/cs490-exercise-app-firebase-adminsdk.json
 
-      # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+      - name: Run unit tests
+        run: pytest
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
