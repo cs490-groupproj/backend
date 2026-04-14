@@ -276,6 +276,7 @@ def list_exercises():
         out.append({
             'exercise_id': e.exercise_id,
             'name': e.name,
+            'youtube_url': e.youtube_url,
             'body_part_id': e.body_part_id,
             'category_id': e.category_id,
             'body_part': e.body_part.name if e.body_part else None,
@@ -299,6 +300,7 @@ def get_exercise(exercise_id):
     return jsonify({
         'exercise_id': e.exercise_id,
         'name': e.name,
+        'youtube_url': e.youtube_url,
         'body_part_id': e.body_part_id,
         'category_id': e.category_id,
         'body_part': e.body_part.name if e.body_part else None,

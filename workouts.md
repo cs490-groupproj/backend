@@ -1723,6 +1723,7 @@ Send either:
 {
   "exercise_id": 1,
   "name": "Bench press",
+  "youtube_url": "https://www.youtube.com/watch?v=example",
   "body_part_id": 2,
   "category_id": 1,
   "body_part": "Chest",
