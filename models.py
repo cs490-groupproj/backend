@@ -246,6 +246,9 @@ class Exercises(db.Model):
     exercise_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     name = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     youtube_url = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'))
+    notes = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
+    mood = db.Column(Integer)
+    duration_mins = db.Column(Integer)
     body_part_id = db.Column(Integer, nullable=False)
     category_id = db.Column(Integer, nullable=False)
 

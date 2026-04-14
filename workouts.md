@@ -1724,6 +1724,9 @@ Send either:
   "exercise_id": 1,
   "name": "Bench press",
   "youtube_url": "https://www.youtube.com/watch?v=example",
+  "notes": "Keep elbows tucked",
+  "mood": 4,
+  "duration_mins": 45,
   "body_part_id": 2,
   "category_id": 1,
   "body_part": "Chest",
@@ -2262,6 +2265,11 @@ Week window:
 ### `GET /workouts/<workout_id>`
 
 Returns workout detail plus nested exercises, including scheduling fields.
+Each nested workout exercise now includes exercise metadata for history views:
+- `exercise_notes`
+- `exercise_mood`
+- `exercise_duration_mins`
+- `exercise_youtube_url`
 
 ### `DELETE /workouts/<workout_id>`
 
