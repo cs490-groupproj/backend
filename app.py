@@ -15,6 +15,7 @@ from auth.authentication import require_auth
 from models import db, ExerciseCategories
 
 from endpoints.client import client_blueprint
+from endpoints.coach import coach_blueprint
 from endpoints.message_history import message_blueprint
 from endpoints.nutrition import nutrition_blueprint
 from endpoints.usda_proxy import usda_proxy_blueprint
@@ -45,6 +46,7 @@ app.register_blueprint(usda_proxy_blueprint, url_prefix='/proxy/usda')
 app.register_blueprint(users_blueprint, url_prefix='/users')
 app.register_blueprint(workouts_blueprint)
 app.register_blueprint(message_blueprint, url_prefix='/messages')
+app.register_blueprint(coach_blueprint, url_prefix='/coaches')
 
 init_firebase()
 
