@@ -60,6 +60,7 @@ class MealPlans(db.Model):
 
     meal_plan_id= db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     meal_datetime = db.Column(DateTime, nullable=False)
+    logged_datetime = db.Column(DateTime)
     meal_type_id = db.Column(Integer, nullable=False)
     user_id = db.Column(Uuid, nullable=False)
     eaten = db.Column(Boolean, nullable=False)
@@ -81,6 +82,8 @@ class MealPlanFoods(db.Model):
     meal_plan_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     meal_plan_id = db.Column(Integer, nullable=False)
     fdc_id = db.Column(Integer, nullable=False)
+    calories = db.Column(Integer, nullable=False, server_default=text('0'))
+    serving_size = db.Column(Integer, nullable=False, server_default=text('0'))
 
     meal_plan = db.relationship('MealPlans', back_populates='meal_plan_foods')
 
