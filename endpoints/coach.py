@@ -71,37 +71,3 @@ def search():
                 'total_results': total_results,
                 'coaches': [_build_coach_json(c) for c in coaches]
             })
-
-@coach_blueprint.route('/by_client')
-@require_auth
-def coaches_by_client():
-
-    user_id = request.args.get('user_id')
-
-    if user_id is None:
-        return jsonify({'message': 'user_id parameter is required'}), 400
-
-    try:
-        user_id = UUID(user_id)
-    except (ValueError, AttributeError):
-        return jsonify({'message': 'user_id is invalid'}), 400
-
-    if user_id != g.user.user_id:
-        return jsonify({'message': 'You are not authorized to access this resource'}), 401
-
-    avg_ratings = db.session.query(CoachReviews.coach_id, func.avg(CoachReviews.rating).label('avg_rating')) \
-        .group_by(CoachReviews.coach_id) \
-        .subquery()
-
-    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
-        .join(ClientCoaches, ClientCoaches.coach_id == Users.user_id) \
-        .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-        .join(CoachSpecializations) \
-        .filter(ClientCoaches.client_id == user_id) \
-        .filter(Users.is_active == True) \
-        .filter(Users.is_coach == True) \
-        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
-
-    return jsonify({
-        'coaches': [_build_coach_json(c) for c in coaches]
-    })
