@@ -81,6 +81,7 @@ class MealPlanFoods(db.Model):
 
     meal_plan_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     meal_plan_id = db.Column(Integer, nullable=False)
+    food_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     fdc_id = db.Column(Integer, nullable=False)
     calories = db.Column(Integer, nullable=False, server_default=text('0'))
     serving_size = db.Column(Integer, nullable=False, server_default=text('0'))
