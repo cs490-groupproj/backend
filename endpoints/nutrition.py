@@ -183,7 +183,7 @@ def today():
     total_cals = 0
     for mp in meal_plans:
         for mpf in mp.meal_plan_foods:
-            portion_size = mpf.portion_size
+            portion_size = mpf.serving_size
             total_cals += mpf.calories * (portion_size // 100)
 
     return jsonify({
@@ -194,7 +194,7 @@ def today():
                 'fdc_id': f.fdc_id,
                 'food_name': f.food_name,
                 'calories': f.calories,
-                'portion_size': f.portion_size,
+                'portion_size': f.serving_size,
             } for f in mp.meal_plan_foods]
         } for mp in meal_plans],
         'daily_total_calories': total_cals
