@@ -128,9 +128,6 @@ def _workout_exercise_public(we: WorkoutExercises):
         'workout_id': we.workout_id,
         'exercise_id': we.exercise_id,
         'name': ex.name if ex else None,
-        'exercise_notes': ex.notes if ex else None,
-        'exercise_mood': ex.mood if ex else None,
-        'exercise_duration_mins': ex.duration_mins if ex else None,
         'exercise_youtube_url': ex.youtube_url if ex else None,
         'position': we.position,
         'sets': we.sets,
@@ -281,9 +278,6 @@ def list_exercises():
             'exercise_id': e.exercise_id,
             'name': e.name,
             'youtube_url': e.youtube_url,
-            'notes': e.notes,
-            'mood': e.mood,
-            'duration_mins': e.duration_mins,
             'body_part_id': e.body_part_id,
             'category_id': e.category_id,
             'body_part': e.body_part.name if e.body_part else None,
@@ -308,9 +302,6 @@ def get_exercise(exercise_id):
         'exercise_id': e.exercise_id,
         'name': e.name,
         'youtube_url': e.youtube_url,
-        'notes': e.notes,
-        'mood': e.mood,
-        'duration_mins': e.duration_mins,
         'body_part_id': e.body_part_id,
         'category_id': e.category_id,
         'body_part': e.body_part.name if e.body_part else None,
@@ -619,6 +610,9 @@ def create_workout():
     w.title = str(title).strip()
     w.workout_type_id = _int_or_none(body.get('workout_type_id'))
     w.workout_plan_id = _int_or_none(body.get('workout_plan_id'))
+    w.notes = body.get('notes')
+    w.mood = _int_or_none(body.get('mood'))
+    w.duration_mins = _int_or_none(body.get('duration_mins'))
     completion_date_raw = body.get('completion_date')
     if completion_date_raw is not None:
         parsed_completion_date = _parse_datetime_or_none(completion_date_raw)
@@ -642,6 +636,9 @@ def create_workout():
         'title': w.title,
         'workout_type_id': w.workout_type_id,
         'workout_plan_id': w.workout_plan_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
         'completion_date': _serialize_datetime(w.completion_date),
     }), 201
 
@@ -669,6 +666,13 @@ def create_workout_from_plan(plan_id):
     w.title = plan.title
     w.workout_type_id = plan.workout_type_id
     w.workout_plan_id = plan.workout_plan_id
+    w.notes = body.get('notes')
+    w.mood = _int_or_none(body.get('mood'))
+    w.duration_mins = (
+        _int_or_none(body.get('duration_mins'))
+        if body.get('duration_mins') is not None
+        else plan.duration_min
+    )
     w.completion_date = parsed_completion_date
     db.session.add(w)
     db.session.flush()
@@ -692,6 +696,9 @@ def create_workout_from_plan(plan_id):
     db.session.commit()
     return jsonify({
         'workout_id': w.workout_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
         'completion_date': _serialize_datetime(w.completion_date),
     }), 201
 
@@ -719,6 +726,13 @@ def update_workout(workout_id):
                 return jsonify({'error': 'completion_date must be a valid ISO datetime'}), 400
             w.completion_date = parsed_completion_date
 
+    if 'notes' in body:
+        w.notes = body.get('notes')
+    if 'mood' in body:
+        w.mood = _int_or_none(body.get('mood'))
+    if 'duration_mins' in body:
+        w.duration_mins = _int_or_none(body.get('duration_mins'))
+
     db.session.commit()
     return jsonify({'message': 'Workout updated'}), 200
 
@@ -737,6 +751,9 @@ def list_user_workouts():
         db.session.query(
             Workouts.workout_id,
             Workouts.title,
+            Workouts.notes,
+            Workouts.mood,
+            Workouts.duration_mins,
             Workouts.completion_date,
         )
         .filter(Workouts.user_id == uid)
@@ -747,6 +764,9 @@ def list_user_workouts():
         {
             'workout_id': r.workout_id,
             'title': r.title,
+            'notes': r.notes,
+            'mood': r.mood,
+            'duration_mins': r.duration_mins,
             'completion_date': _serialize_datetime(r.completion_date),
         }
         for r in rows
@@ -771,6 +791,9 @@ def list_user_weekly_assignments():
         db.session.query(
             Workouts.workout_id,
             Workouts.title,
+            Workouts.notes,
+            Workouts.mood,
+            Workouts.duration_mins,
             Workouts.completion_date,
             Workouts.workout_plan_id,
             WorkoutPlanDays.id,
@@ -792,6 +815,9 @@ def list_user_weekly_assignments():
                 'workout_id': r.workout_id,
                 'title': r.title,
                 'workout_plan_id': r.workout_plan_id,
+                'notes': r.notes,
+                'mood': r.mood,
+                'duration_mins': r.duration_mins,
                 'completion_date': _serialize_datetime(r.completion_date),
                 'assignments': [],
             }
@@ -822,6 +848,9 @@ def get_workout(workout_id):
         'title': w.title,
         'workout_type_id': w.workout_type_id,
         'workout_plan_id': w.workout_plan_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
         'completion_date': _serialize_datetime(w.completion_date),
         'assignments': [_plan_day_public(d) for d in sorted(w.workout_plan.workout_plan_days, key=lambda x: x.id)] if w.workout_plan else [],
         'exercises': [_workout_exercise_public(we) for we in exercises],
