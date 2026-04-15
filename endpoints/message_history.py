@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 
 from auth.authentication import require_auth
 from models import *
@@ -14,12 +14,26 @@ message_blueprint = Blueprint("message_blueprint", __name__)
 def unread_messages():
     user_id = g.user.user_id
     messages = (
-        db.session.query(Messages)
+        db.session.query(
+            Messages.message_sender, func.count(Messages.message_id)
+        )
         .filter(Messages.message_recipient == user_id)
-        .filter(Messages.read.is_(False))
+        .filter(Messages.read == False)
+        .group_by(Messages.message_sender)
+        .all()
     )
 
-    return jsonify([{"unread_message_count": messages.count()}]), 200
+    return jsonify(
+        {
+            "unread_message_counts": [
+                {
+                    "message_sender_id": m[0],
+                    "unread_count": m[1],
+                }
+                for m in messages
+            ]
+        }
+    ), 200
 
 
 @message_blueprint.route("/mark_received", methods=["POST"])
