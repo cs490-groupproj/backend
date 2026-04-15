@@ -153,7 +153,7 @@ def log_eaten(meal_plan_id):
         'logged_datetime': str(meal_plan.logged_datetime.isoformat()),
     }), 200
 
-@nutrition_blueprint.route('today')
+@nutrition_blueprint.route('/today')
 @require_auth
 def today():
     timezone_string = request.args.get('timezone')
@@ -189,7 +189,7 @@ def today():
     return jsonify({
         'meal_plans': [{
             'meal_plan_id': mp.meal_plan_id,
-            'meal_type': mp.meal_type,
+            'meal_type': mp.meal_type_id,
             'meal_plan_foods': [{
                 'fdc_id': f.fdc_id,
                 'food_name': f.food_name,
