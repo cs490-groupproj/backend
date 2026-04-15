@@ -229,7 +229,9 @@ class DailySurveyResponses(db.Model):
     daily_survey_response_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     user_id = db.Column(Uuid, nullable=False)
     mood = db.Column(Integer, nullable=False)
-    feels_meeting_goals = db.Column(Integer, nullable=False)
+    energy = db.Column(Integer, nullable=False)
+    sleep = db.Column(Integer, nullable=False)
+    notes = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
     date_submitted = db.Column(Date, nullable=False)
 
     user = db.relationship('Users', back_populates='daily_survey_responses')
