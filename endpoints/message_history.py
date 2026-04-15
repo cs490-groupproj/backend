@@ -15,11 +15,15 @@ def unread_messages():
     user_id = g.user.user_id
     messages = (
         db.session.query(
-            Messages.message_sender, func.count(Messages.message_id)
+            Messages.message_sender,
+            Users.first_name,
+            Users.last_name,
+            func.count(Messages.message_id),
         )
+        .join(Users, Messages.message_sender == Users.user_id)
         .filter(Messages.message_recipient == user_id)
         .filter(Messages.read == False)
-        .group_by(Messages.message_sender)
+        .group_by(Messages.message_sender, Users.first_name, Users.last_name)
         .all()
     )
 
@@ -28,7 +32,8 @@ def unread_messages():
             "unread_message_counts": [
                 {
                     "message_sender_id": m[0],
-                    "unread_count": m[1],
+                    "message_sender_name": (m[1] + " " + m[2]),
+                    "unread_count": m[3],
                 }
                 for m in messages
             ]
