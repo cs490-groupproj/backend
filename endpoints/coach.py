@@ -23,51 +23,99 @@ def _build_coach_json(coach):
 @coach_blueprint.route('/search')
 @require_auth
 def search():
-        limit = request.args.get('limit', type=int)
-        offset = request.args.get('offset', type=int)
-        query = request.args.get('query')
+    """
+    Search coaches
+    ---
+    tags:
+        - Coaches
+    parameters:
+        - name: limit
+          in: path
+          required: true
+          type: integer
+        - name: offset
+          in: path
+          required: true
+          type: integer
+        - name: query
+          in: path
+          required: false
+          type: string
+    responses:
+        200:
+            description: Get coaches based on search query, or all coaches if blank
+            schema:
+                type: object
+                properties:
+                    total_results:
+                        type: integer
+                    coaches:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                coach_user_id:
+                                    type: string
+                                first_name:
+                                    type: string
+                                last_name:
+                                    type: string
+                                coach_cost:
+                                    type: integer
+                                avg_rating:
+                                    type: integer
+                                is_exercise_specialization:
+                                    type: boolean
+                                is_nutrition_specialization:
+                                    type: boolean
+        400:
+            description: Error with parameters
+    """
+    limit = request.args.get('limit', type=int)
+    offset = request.args.get('offset', type=int)
+    query = request.args.get('query')
 
-        if limit is None or offset is None:
-            return jsonify({'message': 'limit and offset parameters must be integers included in URL'}), 400
+    if limit is None or offset is None:
+        return jsonify({'message': 'limit and offset parameters must be integers included in URL'}), 400
 
-        avg_ratings = db.session.query(CoachReviews.coach_id, func.avg(CoachReviews.rating).label('avg_rating'))\
-            .group_by(CoachReviews.coach_id) \
-            .subquery()
+    avg_ratings = db.session.query(CoachReviews.coach_id, func.avg(CoachReviews.rating).label('avg_rating'))\
+        .group_by(CoachReviews.coach_id) \
+        .subquery()
 
-        coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
-            .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-            .join(CoachSpecializations) \
-            .filter(Users.is_active == True) \
-            .filter(Users.is_coach == True) \
-            .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
+    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
+        .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
+        .join(CoachSpecializations) \
+        .filter(Users.is_active == True) \
+        .filter(Users.is_coach == True) \
+        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
 
 
-        if query is not None:
-            terms = query.split(' ')
-            filters = []
+    if query is not None:
+        terms = query.split(' ')
+        filters = []
 
-            for t in terms:
-                filters.append(
-                    or_(
-                        Users.first_name.ilike(f'%{t}%'),
-                        Users.last_name.ilike(f'%{t}%')
-                    )
+        for t in terms:
+            filters.append(
+                or_(
+                    Users.first_name.ilike(f'%{t}%'),
+                    Users.last_name.ilike(f'%{t}%')
                 )
+            )
 
-            coaches = coaches.filter(or_(*filters))
+        coaches = coaches.filter(or_(*filters))
 
-            total_results = coaches.count()
+        total_results = coaches.count()
 
-            coaches = coaches.offset(offset).limit(limit).all()
+        coaches = coaches.offset(offset).limit(limit).all()
 
-            return jsonify({
-                'total_results': total_results,
-                'coaches': [_build_coach_json(c) for c in coaches]
-            })
-        else:
-            total_results = coaches.count()
-            coaches = coaches.offset(offset).limit(limit).all()
-            return jsonify({
-                'total_results': total_results,
-                'coaches': [_build_coach_json(c) for c in coaches]
-            })
+        return jsonify({
+            'total_results': total_results,
+            'coaches': [_build_coach_json(c) for c in coaches]
+        })
+    else:
+        total_results = coaches.count()
+        coaches = coaches.offset(offset).limit(limit).all()
+        return jsonify({
+            'total_results': total_results,
+            'coaches': [_build_coach_json(c) for c in coaches]
+        })
