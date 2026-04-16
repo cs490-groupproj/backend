@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from enum import Enum
 from uuid import UUID
 
@@ -242,6 +242,44 @@ def get_goals(user_id):
         'date_created': g.date_created.isoformat() if g.date_created else None,
         'last_updated': g.last_updated.isoformat() if g.last_updated else None,
     } for g in all_goals]), 200
+
+@client_blueprint.route('/<user_id>/daily_survey/history', methods=['GET'])
+@require_auth
+def get_daily_survey_history(user_id):
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
+
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to view this content'}), 403
+
+    days = request.args.get('days', default=7, type=int)
+    if days is None or days < 1 or days > 366:
+        return jsonify({'error': 'days must be an integer between 1 and 366'}), 400
+
+    cutoff = date.today() - timedelta(days=days - 1)
+
+    rows = (
+        db.session.query(DailySurveyResponses)
+        .filter(DailySurveyResponses.user_id == requested_user_id)
+        .filter(DailySurveyResponses.date_submitted >= cutoff)
+        .order_by(DailySurveyResponses.date_submitted.asc())
+        .all()
+    )
+
+    return jsonify([{
+        'daily_survey_id': r.daily_survey_response_id,
+        'mood': r.mood,
+        'energy': r.energy,
+        'sleep': r.sleep,
+        'notes': r.notes,
+        'date_submitted': r.date_submitted.isoformat() if r.date_submitted else None,
+    } for r in rows]), 200
 
 @client_blueprint.route('/<user_id>/daily_survey/')
 @require_auth
