@@ -1,4 +1,5 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
+from enum import Enum
 from uuid import UUID
 
 from models import *
@@ -261,6 +262,44 @@ def get_goals(user_id):
         'last_updated': g.last_updated.isoformat() if g.last_updated else None,
     } for g in all_goals]), 200
 
+@client_blueprint.route('/<user_id>/daily_survey/history', methods=['GET'])
+@require_auth
+def get_daily_survey_history(user_id):
+    role_err = _require_client_role()
+    if role_err is not None:
+        return role_err
+
+    try:
+        requested_user_id = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'error': 'invalid uuid'}), 400
+
+    if requested_user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to view this content'}), 403
+
+    days = request.args.get('days', default=7, type=int)
+    if days is None or days < 1 or days > 366:
+        return jsonify({'error': 'days must be an integer between 1 and 366'}), 400
+
+    cutoff = date.today() - timedelta(days=days - 1)
+
+    rows = (
+        db.session.query(DailySurveyResponses)
+        .filter(DailySurveyResponses.user_id == requested_user_id)
+        .filter(DailySurveyResponses.date_submitted >= cutoff)
+        .order_by(DailySurveyResponses.date_submitted.asc())
+        .all()
+    )
+
+    return jsonify([{
+        'daily_survey_id': r.daily_survey_response_id,
+        'mood': r.mood,
+        'energy': r.energy,
+        'sleep': r.sleep,
+        'notes': r.notes,
+        'date_submitted': r.date_submitted.isoformat() if r.date_submitted else None,
+    } for r in rows]), 200
+
 @client_blueprint.route('/<user_id>/daily_survey/')
 @require_auth
 def get_daily_survey(user_id):
@@ -274,7 +313,10 @@ def get_daily_survey(user_id):
         return jsonify([{
             'daily_survey_id': survey.daily_survey_response_id,
             'mood': survey.mood,
-            'feels_meeting_goals': survey.feels_meeting_goals
+            'energy': survey.energy,
+            'sleep': survey.sleep,
+            'notes': survey.notes,
+            'date_submitted': survey.date_submitted
         }])
 
 @client_blueprint.route('/<user_id>/daily_survey/submit', methods=['POST'])
@@ -282,10 +324,12 @@ def get_daily_survey(user_id):
 def submit_daily_survey(user_id):
     user = g.user
     mood = request.json['mood']
-    feels_meeting_goals = request.json['feels_meeting_goals']
+    energy = request.json['energy']
+    sleep = request.json['sleep']
+    notes = request.json['notes']
 
-    if mood is None or feels_meeting_goals is None:
-        return jsonify({'error': 'JSON must contain mood and feels_meeting_goals'}), 400
+    if mood is None or energy is None or sleep is None:
+        return jsonify({'error': 'JSON must contain mood, energy, sleep, and notes'}), 400
 
     survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()).first())
 
@@ -295,16 +339,21 @@ def submit_daily_survey(user_id):
         new_survey = DailySurveyResponses()
         new_survey.user_id = user_id
         new_survey.mood = mood
-        new_survey.feels_meeting_goals = feels_meeting_goals
-        new_survey.date_created = date.today()
+        new_survey.energy = energy
+        new_survey.sleep = sleep
+        new_survey.notes = notes
+        new_survey.date_submitted = date.today()
         db.session.add(new_survey)
         db.session.commit()
 
         return jsonify([{
             'daily_survey_id': new_survey.daily_survey_response_id,
             'mood': new_survey.mood,
-            'feels_meeting_goals': new_survey.feels_meeting_goals,
-            'date_created': new_survey.date_created
+            'energy': new_survey.energy,
+            'sleep': new_survey.sleep,
+            'notes': new_survey.notes,
+            'date_submitted': new_survey.date_submitted
+
         }]), 201
 
 
@@ -314,7 +363,9 @@ def edit_daily_survey(user_id):
     user = g.user
     survey_id = request.json['survey_id']
     mood = request.json['mood']
-    feels_meeting_goals = request.json['feels_meeting_goals']
+    notes = request.json['notes']
+    energy = request.json.get('energy')
+    sleep = request.json.get('sleep')
 
     survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.daily_survey_response_id == survey_id).first())
 
@@ -324,10 +375,17 @@ def edit_daily_survey(user_id):
         return jsonify([{'error': 'You are not authorized to modify this content'}]), 401
     else:
         survey.mood = mood or survey.mood
-        survey.feels_meeting_goals = feels_meeting_goals or survey.feels_meeting_goals
+        survey.notes = notes or survey.notes
+        if energy is not None:
+            survey.energy = energy
+        if sleep is not None:
+            survey.sleep = sleep
+        db.session.commit()
 
         return jsonify([{
             'daily_survey_id': survey.daily_survey_response_id,
             'mood': survey.mood,
-            'feels_meeting_goals': survey.feels_meeting_goals
+            'energy': survey.energy,
+            'sleep': survey.sleep,
+            'notes': survey.notes
         }]), 200
