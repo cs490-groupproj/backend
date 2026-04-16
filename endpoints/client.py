@@ -68,6 +68,36 @@ def _require_client_role():
 @client_blueprint.route('/<user_id>/coaches')
 @require_auth
 def coaches(user_id):
+    """
+    Get a list of a user's coaches
+    ---
+    tags:
+        - Clients
+    responses:
+        200:
+            description: List of all coaches
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        coach_user_id:
+                            type: integer
+                        first_name:
+                            type: string
+                        last_name:
+                            type: string
+                        coach_cost:
+                            type: integer
+                        avg_rating:
+                            type: integer
+                        is_exercise_specialization:
+                            type: boolean
+                        is_nutrition_specialization:
+                            type: boolean
+            400:
+                description: UUID is invalid
+    """
     user = g.user
 
     try:
@@ -100,6 +130,44 @@ def coaches(user_id):
 @client_blueprint.route('/<user_id>/current_goals')
 @require_auth
 def get_current_goals(user_id):
+    """
+    Get the current goals for a client
+    ---
+    tags:
+        - Clients
+    responses:
+        200:
+            description: Latest client survey
+            schema:
+                type: object
+                properties:
+                    user_survey_id:
+                        type: integer
+                    primary_goals_binary:
+                        type: string
+                        description: |
+                            Primary goals are stored as a binary string where the digits at each offset represent.
+                            0: Lose weight
+                            1: Build muscle
+                            2: Increase strength
+                            3: Improve endurance
+                            4: General fitness
+                            5: Sports performance
+                    weight_goal:
+                        type: integer
+                    exercise_minutes_goal:
+                        type: integer
+                    personal_goals:
+                        type: string
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+        400:
+            description: Invalid UUID
+        404:
+            description: No client survey found for user
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
@@ -139,6 +207,64 @@ def get_current_goals(user_id):
 @client_blueprint.route('/<user_id>/initial_goal_survey', methods=['POST'])
 @require_auth
 def add_initial_goals(user_id):
+    """
+    Submit initial goal survey on registration
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            required:
+                - name
+            properties:
+                primary_goals_binary:
+                    type: string
+                    required: true
+                weight_goal:
+                    type: integer
+                    required: true
+                exercise_minutes_goal:
+                    type: integer
+                    required: true
+                personal_goals:
+                    type: string
+                    required: true
+    responses:
+        201:
+            description: Submit initial goal survey on onboarding
+            schema:
+                type: object
+                properties:
+                    user_survey_id:
+                        type: integer
+                    primary_goals_binary:
+                        type: string
+                        description: |
+                            Primary goals are stored as a binary string where the digits at each offset represent.
+                            0: Lose weight
+                            1: Build muscle
+                            2: Increase strength
+                            3: Improve endurance
+                            4: General fitness
+                            5: Sports performance
+                    weight_goal:
+                        type: integer
+                    exercise_minutes_goal:
+                        type: integer
+                    personal_goals:
+                        type: string
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+        400:
+            description: Invalid UUID
+        409:
+            description: User already has completed the initial goal survey.
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
@@ -184,6 +310,57 @@ def add_initial_goals(user_id):
 @client_blueprint.route('/<user_id>/edit_goals', methods=['PATCH'])
 @require_auth
 def edit_goals(user_id):
+    """
+    Edit goal survey
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            required:
+                - name
+            properties:
+                primary_goals_binary:
+                    type: string
+                    required: false
+                weight_goal:
+                    type: integer
+                    required: false
+                exercise_minutes_goal:
+                    type: integer
+                    required: false
+                personal_goals:
+                    type: string
+                    required: false
+    responses:
+        200:
+            description: Edited goal survey
+            schema:
+                type: object
+                properties:
+                    user_survey_id:
+                        type: integer
+                    primary_goals_binary:
+                        type: string
+                    weight_goal:
+                        type: integer
+                    exercise_minutes_goal:
+                        type: integer
+                    personal_goals:
+                        type: string
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+        400:
+            description: Invalid UUID
+        404:
+            description: Client has no existing survey to update
+
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
@@ -265,6 +442,39 @@ def get_goals(user_id):
 @client_blueprint.route('/<user_id>/daily_survey/history', methods=['GET'])
 @require_auth
 def get_daily_survey_history(user_id):
+    """
+    Get daily survey history
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: days
+          description: Number of days between 1 and 365
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Daily survey history
+            type: array
+            items:
+                type: object
+                properties:
+                    daily_survey_id:
+                        type: integer
+                    mood:
+                        type: integer
+                    energy:
+                        type: integer
+                    sleep:
+                        type: integer
+                    notes:
+                        type: string
+                    date_submitted:
+                        type: string
+        400:
+            description: Invalid UUID or day
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
@@ -303,6 +513,32 @@ def get_daily_survey_history(user_id):
 @client_blueprint.route('/<user_id>/daily_survey/')
 @require_auth
 def get_daily_survey(user_id):
+    """
+        Get current daily survey
+        ---
+        tags:
+            - Clients
+        responses:
+            200:
+                description: Current daily survey
+                schema:
+                    type: object
+                    properties:
+                        daily_survey_id:
+                            type: integer
+                        mood:
+                            type: integer
+                        energy:
+                            type: integer
+                        sleep:
+                            type: integer
+                        notes:
+                            type: string
+                        date_submitted:
+                            type: string
+            404:
+                description: User has not submitted a daily survey for today
+        """
     user = g.user
     survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()))
     if survey is None:
@@ -322,6 +558,53 @@ def get_daily_survey(user_id):
 @client_blueprint.route('/<user_id>/daily_survey/submit', methods=['POST'])
 @require_auth
 def submit_daily_survey(user_id):
+    """
+    Submit daily survey
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            required:
+                - name
+            properties:
+                mood:
+                    type: integer
+                    required: true
+                energy:
+                    type: integer
+                    required: true
+                sleep:
+                    type: integer
+                    required: true
+                notes:
+                    type: string
+    responses:
+        201:
+            description: Submit initial goal survey on onboarding
+            schema:
+                type: object
+                properties:
+                    daily_survey_id:
+                        type: integer
+                    mood:
+                        type: integer
+                    energy:
+                        type: integer
+                    sleep:
+                        type: integer
+                    notes:
+                        type: string
+                    date_submitted:
+                        type: string
+        400:
+            description: Missing parameters
+        409:
+            description: User already submitted a daily survey for today
+    """
     user = g.user
     mood = request.json['mood']
     energy = request.json['energy']
@@ -334,7 +617,7 @@ def submit_daily_survey(user_id):
     survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()).first())
 
     if survey is not None:
-        return jsonify([{'error': 'User already submitted a daily survey for today. Edit using edit endpoint.'}]), 400
+        return jsonify([{'error': 'User already submitted a daily survey for today. Edit using edit endpoint.'}]), 409
     else:
         new_survey = DailySurveyResponses()
         new_survey.user_id = user_id
@@ -360,6 +643,52 @@ def submit_daily_survey(user_id):
 @client_blueprint.route('/<user_id>/daily_survey/edit', methods=['PATCH'])
 @require_auth
 def edit_daily_survey(user_id):
+    """
+        Edit daily survey
+        ---
+        tags:
+            - Clients
+        parameters:
+            - name: body
+              in: body
+              required: true
+              schema:
+                required:
+                    - name
+                properties:
+                    survey_id:
+                        type: integer
+                        required: true
+                    mood:
+                        type: integer
+                        required: false
+                    energy:
+                        type: integer
+                        required: false
+                    sleep:
+                        type: integer
+                        required: false
+                    notes:
+                        type: string
+        responses:
+            200:
+                description: Submit initial goal survey on onboarding
+                schema:
+                    type: object
+                    properties:
+                        daily_survey_id:
+                            type: integer
+                        mood:
+                            type: integer
+                        energy:
+                            type: integer
+                        sleep:
+                            type: integer
+                        notes:
+                            type: string
+            404:
+                description: Daily survey does not exist
+        """
     user = g.user
     survey_id = request.json['survey_id']
     mood = request.json['mood']
