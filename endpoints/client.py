@@ -5,6 +5,18 @@ from uuid import UUID
 from models import *
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
+from sqlalchemy import func
+
+def _build_coach_json(coach):
+    return {
+        'coach_user_id': coach[0].user_id,
+        'first_name': coach[0].first_name,
+        'last_name': coach[0].last_name,
+        'coach_cost': coach[0].coach_cost,
+        'avg_rating': coach[1],
+        'is_exercise_specialization': coach[0].coach_specializations.exercise,
+        'is_nutrition_specialization': coach[0].coach_specializations.nutrition
+    }
 
 client_blueprint = Blueprint('client_blueprint', __name__)
 
@@ -66,14 +78,21 @@ def coaches(user_id):
     if user.user_id != user_id:
         return jsonify({'error': 'You are not authorized to view this content'}), 401
 
-    relationships = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == user_id)
+    avg_ratings = db.session.query(CoachReviews.coach_id, func.avg(CoachReviews.rating).label('avg_rating')) \
+        .group_by(CoachReviews.coach_id) \
+        .subquery()
+
+    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
+        .join(ClientCoaches, ClientCoaches.coach_id == Users.user_id) \
+        .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
+        .join(CoachSpecializations) \
+        .filter(ClientCoaches.client_id == user_id) \
+        .filter(Users.is_active == True) \
+        .filter(Users.is_coach == True) \
+        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
 
     return jsonify({
-        'coaches': [{
-            'id': r.coach_id,
-            'first_name': r.coach.first_name,
-            'last_name': r.coach.last_name
-        } for r in relationships]
+        'coaches': [_build_coach_json(c) for c in coaches]
     })
 
 

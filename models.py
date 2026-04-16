@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Boolean, DECIMAL, Date, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Uuid, text
+from sqlalchemy import Boolean, DECIMAL, Date, DateTime, ForeignKeyConstraint, Identity, Index, Integer, PrimaryKeyConstraint, String, TEXT, Time, Uuid, text
 
 db = SQLAlchemy()
 
@@ -60,6 +60,7 @@ class MealPlans(db.Model):
 
     meal_plan_id= db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     meal_datetime = db.Column(DateTime, nullable=False)
+    logged_datetime = db.Column(DateTime)
     meal_type_id = db.Column(Integer, nullable=False)
     user_id = db.Column(Uuid, nullable=False)
     eaten = db.Column(Boolean, nullable=False)
@@ -80,7 +81,10 @@ class MealPlanFoods(db.Model):
 
     meal_plan_food_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     meal_plan_id = db.Column(Integer, nullable=False)
+    food_name = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     fdc_id = db.Column(Integer, nullable=False)
+    calories = db.Column(Integer, nullable=False, server_default=text('0'))
+    serving_size = db.Column(Integer, nullable=False, server_default=text('0'))
 
     meal_plan = db.relationship('MealPlans', back_populates='meal_plan_foods')
 
@@ -117,13 +121,15 @@ class Users(db.Model):
     client_coaches_client = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.client_id]', back_populates='client')
     client_coaches_coach = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.coach_id]', back_populates='coach')
     client_goals = db.relationship('ClientGoals', back_populates='user')
+    coach_reviews = db.relationship('CoachReviews', foreign_keys='[CoachReviews.coach_id]', back_populates='coach')
+    coach_reviews_left = db.relationship('CoachReviews', foreign_keys='[CoachReviews.left_by_user_id]', back_populates='left_by_user')
+    coach_specializations = db.relationship('CoachSpecializations', back_populates='coach', uselist=False)
     coach_surveys = db.relationship('CoachSurveys', back_populates='user')
     daily_survey_responses = db.relationship('DailySurveyResponses', back_populates='user')
     meal_plans = db.relationship('MealPlans', back_populates='user')
     messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
     messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
     notifications = db.relationship('Notifications', back_populates='users')
-    user_tokens = db.relationship('UserTokens', back_populates='user')
     workout_plans = db.relationship('WorkoutPlans', back_populates='users')
     workouts = db.relationship('Workouts', back_populates='user')
 
@@ -202,6 +208,39 @@ class ClientGoals(db.Model):
     user = db.relationship('Users', back_populates='client_goals')
 
 
+class CoachReviews(db.Model):
+    __tablename__ = 'coach_reviews'
+    __table_args__ = (
+        ForeignKeyConstraint(['coach_id'], ['users.user_id'], name='FK_CoachReviews_Coach'),
+        ForeignKeyConstraint(['left_by_user_id'], ['users.user_id'], name='FK_CoachReviews_User'),
+        PrimaryKeyConstraint('coach_review_id', name='PK__coach_re__0C597448EA0AB3AC')
+    )
+
+    coach_review_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    coach_id = db.Column(Uuid, nullable=False)
+    left_by_user_id = db.Column(Uuid, nullable=False)
+    rating = db.Column(Integer, nullable=False)
+
+    coach = db.relationship('Users', foreign_keys=[coach_id], back_populates='coach_reviews')
+    left_by_user = db.relationship('Users', foreign_keys=[left_by_user_id], back_populates='coach_reviews_left')
+
+
+class CoachSpecializations(db.Model):
+    __tablename__ = 'coach_specializations'
+    __table_args__ = (
+        ForeignKeyConstraint(['coach_id'], ['users.user_id'], name='FK_CoachSpecializations_Coach'),
+        PrimaryKeyConstraint('coach_specialization_id', name='PK__coach_sp__0C0F7A7604BF6624')
+    )
+
+    coach_specialization_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    coach_id = db.Column(Uuid, nullable=False)
+    exercise = db.Column(Boolean, nullable=False)
+    nutrition = db.Column(Boolean, nullable=False)
+
+    coach = db.relationship('Users', back_populates='coach_specializations')
+
+
+
 class CoachSurveys(db.Model):
     __tablename__ = 'coach_surveys'
     __table_args__ = (
@@ -247,6 +286,7 @@ class Exercises(db.Model):
 
     exercise_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     name = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    youtube_url = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'))
     body_part_id = db.Column(Integer, nullable=False)
     category_id = db.Column(Integer, nullable=False)
 
@@ -291,34 +331,6 @@ class Notifications(db.Model):
     users = db.relationship('Users', back_populates='notifications')
 
 
-class UserAuthentication(Users):
-    __tablename__ = 'user_authentication'
-    __table_args__ = (
-        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_UserAuthentication_UserId'),
-        PrimaryKeyConstraint('user_id', name='PK__user_aut__B9BE370FD88FA9B4')
-    )
-
-    user_id = db.Column(Uuid, primary_key=True)
-    password_hash = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
-    last_updated = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
-
-
-class UserTokens(db.Model):
-    __tablename__ = 'user_tokens'
-    __table_args__ = (
-        ForeignKeyConstraint(['user_id'], ['users.user_id'], name='FK_UserTokens_UserId'),
-        PrimaryKeyConstraint('token_id', name='PK__user_tok__CB3C9E175A336E7E')
-    )
-
-    token_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
-    token = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
-    date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
-    date_expires = db.Column(DateTime, nullable=False)
-    user_id = db.Column(Uuid)
-
-    user = db.relationship('Users', back_populates='user_tokens')
-
-
 class WorkoutPlans(db.Model):
     __tablename__ = 'workout_plans'
     __table_args__ = (
@@ -332,11 +344,17 @@ class WorkoutPlans(db.Model):
     workout_type_id = db.Column(Integer)
     description = db.Column(String(1000, 'SQL_Latin1_General_CP1_CI_AS'))
     created_by = db.Column(Uuid)
+    duration_min = db.Column(Integer)
 
     users = db.relationship('Users', back_populates='workout_plans')
     workout_type = db.relationship('WorkoutTypes', back_populates='workout_plans')
-    workout_plan_exercises = db.relationship('WorkoutPlanExercises', back_populates='workout_plan')
+    workout_plan_exercises = db.relationship(
+        'WorkoutPlanExercises',
+        back_populates='workout_plan',
+        passive_deletes=True,
+    )
     workouts = db.relationship('Workouts', back_populates='workout_plan')
+    workout_plan_days = db.relationship('WorkoutPlanDays', back_populates='workout_plan')
 
 
 class WorkoutPlanExercises(db.Model):
@@ -365,6 +383,21 @@ class WorkoutPlanExercises(db.Model):
     workout_plan = db.relationship('WorkoutPlans', back_populates='workout_plan_exercises')
 
 
+class WorkoutPlanDays(db.Model):
+    __tablename__ = 'workout_plan_days'
+    __table_args__ = (
+        ForeignKeyConstraint(['workout_plan_id'], ['workout_plans.workout_plan_id'], name='FK_WorkoutPlanDays_WorkoutPlanId'),
+        PrimaryKeyConstraint('id', name='PK_workout_plan_days')
+    )
+
+    id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    workout_plan_id = db.Column(Integer, nullable=False)
+    weekday = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    schedule_time = db.Column(Time, nullable=False)
+
+    workout_plan = db.relationship('WorkoutPlans', back_populates='workout_plan_days')
+
+
 class Workouts(db.Model):
     __tablename__ = 'workouts'
     __table_args__ = (
@@ -379,6 +412,10 @@ class Workouts(db.Model):
     title = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     workout_type_id = db.Column(Integer)
     workout_plan_id = db.Column(Integer)
+    notes = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
+    mood = db.Column(Integer)
+    duration_mins = db.Column(Integer)
+    completion_date = db.Column(DateTime)
 
     user = db.relationship('Users', back_populates='workouts')
     workout_plan = db.relationship('WorkoutPlans', back_populates='workouts')

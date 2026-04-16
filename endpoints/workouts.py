@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, time
 from uuid import UUID
 
 from auth.authentication import require_auth
@@ -11,6 +12,7 @@ from models import (
     Exercises,
     WorkoutExercises,
     WorkoutPlanExercises,
+    WorkoutPlanDays,
     WorkoutPlans,
     Workouts,
     WorkoutTypes,
@@ -68,6 +70,57 @@ def _serialize_decimal(val):
     return val
 
 
+def _parse_datetime_or_none(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _serialize_datetime(val):
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.isoformat()
+    return str(val)
+
+
+def _parse_time_or_none(value):
+    if value is None:
+        return None
+    if isinstance(value, time):
+        return value
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        return time.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _serialize_time(val):
+    if val is None:
+        return None
+    if isinstance(val, time):
+        return val.isoformat()
+    return str(val)
+
+
 def _workout_exercise_public(we: WorkoutExercises):
     ex = we.exercise
     return {
@@ -75,6 +128,7 @@ def _workout_exercise_public(we: WorkoutExercises):
         'workout_id': we.workout_id,
         'exercise_id': we.exercise_id,
         'name': ex.name if ex else None,
+        'exercise_youtube_url': ex.youtube_url if ex else None,
         'position': we.position,
         'sets': we.sets,
         'reps': we.reps,
@@ -105,6 +159,15 @@ def _plan_exercise_public(pe: WorkoutPlanExercises):
         'pace_sec_per_km': _serialize_decimal(pe.pace_sec_per_km),
         'calories': pe.calories,
         'notes': pe.notes,
+    }
+
+
+def _plan_day_public(day: WorkoutPlanDays):
+    return {
+        'id': day.id,
+        'workout_plan_id': day.workout_plan_id,
+        'weekday': day.weekday,
+        'schedule_time': _serialize_time(day.schedule_time),
     }
 
 
@@ -192,7 +255,9 @@ def list_body_parts():
 @require_auth
 def list_workout_types():
     rows = db.session.query(WorkoutTypes).order_by(WorkoutTypes.name).all()
-    return jsonify([{'workout_type_id': r.workout_type_id, 'name': r.name} for r in rows]), 200
+    response = [{'workout_type_id': r.workout_type_id, 'name': r.name} for r in rows]
+    print(f"[WORKOUTS DEBUG] GET /workout-types response: {response}")
+    return jsonify(response), 200
 
 
 # --- Master exercises ---
@@ -212,11 +277,13 @@ def list_exercises():
         out.append({
             'exercise_id': e.exercise_id,
             'name': e.name,
+            'youtube_url': e.youtube_url,
             'body_part_id': e.body_part_id,
             'category_id': e.category_id,
             'body_part': e.body_part.name if e.body_part else None,
             'category': e.category.name if e.category else None,
         })
+    print(f"[WORKOUTS DEBUG] GET /exercises response: {out}")
     return jsonify(out), 200
 
 
@@ -234,6 +301,7 @@ def get_exercise(exercise_id):
     return jsonify({
         'exercise_id': e.exercise_id,
         'name': e.name,
+        'youtube_url': e.youtube_url,
         'body_part_id': e.body_part_id,
         'category_id': e.category_id,
         'body_part': e.body_part.name if e.body_part else None,
@@ -247,8 +315,27 @@ def get_exercise(exercise_id):
 @workouts_blueprint.route('/workout-plans', methods=['GET'])
 @require_auth
 def list_workout_plans():
-    rows = db.session.query(WorkoutPlans).order_by(WorkoutPlans.title).all()
-    return jsonify([{'workout_plan_id': r.workout_plan_id, 'title': r.title} for r in rows]), 200
+    created_by_raw = request.args.get('created_by')
+    q = db.session.query(WorkoutPlans)
+    if created_by_raw:
+        if created_by_raw.strip().lower() == 'me':
+            q = q.filter(WorkoutPlans.created_by == g.user.user_id)
+        else:
+            created_by_uuid = _parse_uuid(created_by_raw)
+            if created_by_uuid is None:
+                return jsonify({'error': 'created_by must be a valid UUID or "me"'}), 400
+            q = q.filter(WorkoutPlans.created_by == created_by_uuid)
+
+    rows = q.order_by(WorkoutPlans.title).all()
+    return jsonify([
+        {
+            'workout_plan_id': r.workout_plan_id,
+            'title': r.title,
+            'created_by': str(r.created_by) if r.created_by else None,
+            'duration_min': r.duration_min,
+        }
+        for r in rows
+    ]), 200
 
 
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['GET'])
@@ -257,7 +344,8 @@ def get_workout_plan(plan_id):
     plan = (
         db.session.query(WorkoutPlans)
         .options(
-            joinedload(WorkoutPlans.workout_plan_exercises).joinedload(WorkoutPlanExercises.exercise)
+            joinedload(WorkoutPlans.workout_plan_exercises).joinedload(WorkoutPlanExercises.exercise),
+            joinedload(WorkoutPlans.workout_plan_days),
         )
         .filter(WorkoutPlans.workout_plan_id == plan_id)
         .first()
@@ -271,6 +359,8 @@ def get_workout_plan(plan_id):
         'workout_type_id': plan.workout_type_id,
         'description': plan.description,
         'created_by': str(plan.created_by) if plan.created_by else None,
+        'duration_min': plan.duration_min,
+        'assignments': [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)],
         'exercises': [_plan_exercise_public(pe) for pe in exercises],
     }), 200
 
@@ -287,6 +377,7 @@ def create_workout_plan():
     plan.title = str(title).strip()
     plan.workout_type_id = _int_or_none(body.get('workout_type_id'))
     plan.description = body.get('description')
+    plan.duration_min = _int_or_none(body.get('duration_min'))
     created_by = body.get('created_by')
     if created_by is not None:
         uid = _parse_uuid(created_by)
@@ -303,6 +394,50 @@ def create_workout_plan():
     db.session.add(plan)
     db.session.commit()
     return jsonify({'workout_plan_id': plan.workout_plan_id}), 201
+
+
+@workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['PATCH'])
+@require_auth
+def update_workout_plan(plan_id):
+    plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
+    if plan is None:
+        return jsonify({'error': 'Workout plan not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    if 'title' in body:
+        title = body.get('title')
+        if not title or not str(title).strip():
+            return jsonify({'error': 'title cannot be empty'}), 400
+        plan.title = str(title).strip()
+
+    if 'workout_type_id' in body:
+        workout_type_id = _int_or_none(body.get('workout_type_id'))
+        if workout_type_id is not None:
+            if db.session.query(WorkoutTypes).filter(WorkoutTypes.workout_type_id == workout_type_id).first() is None:
+                return jsonify({'error': 'Invalid workout_type_id'}), 400
+        plan.workout_type_id = workout_type_id
+
+    if 'description' in body:
+        plan.description = body.get('description')
+
+    if 'duration_min' in body:
+        plan.duration_min = _int_or_none(body.get('duration_min'))
+
+    if 'created_by' in body:
+        created_by = body.get('created_by')
+        if created_by is None:
+            plan.created_by = None
+        else:
+            uid = _parse_uuid(created_by)
+            if uid is None:
+                return jsonify({'error': 'Invalid created_by user id'}), 400
+            plan.created_by = uid
+
+    db.session.commit()
+    return jsonify({'message': 'Workout plan updated'}), 200
 
 
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/exercises', methods=['POST'])
@@ -334,6 +469,125 @@ def add_plan_exercises(plan_id):
     return jsonify({'message': 'Added'}), 201
 
 
+@workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['POST'])
+@require_auth
+def add_plan_assignments(plan_id):
+    plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
+    if plan is None:
+        return jsonify({'error': 'Workout plan not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    items = body.get('assignments')
+    if items is None:
+        items = [body]
+    if not isinstance(items, list) or not items:
+        return jsonify({'error': 'Send a single assignment object or { "assignments": [ ... ] }'}), 400
+
+    created = []
+    for item in items:
+        weekday = item.get('weekday')
+        if not isinstance(weekday, str) or not weekday.strip():
+            return jsonify({'error': 'weekday must be a non-empty string'}), 400
+        weekday = weekday.strip()
+        if len(weekday) > 10:
+            return jsonify({'error': 'weekday must be 10 characters or fewer'}), 400
+
+        schedule_time_raw = item.get('schedule_time')
+        schedule_time = _parse_time_or_none(schedule_time_raw)
+        if schedule_time is None:
+            return jsonify({'error': 'schedule_time must be a valid ISO time'}), 400
+
+        row = WorkoutPlanDays()
+        row.workout_plan_id = plan_id
+        row.weekday = weekday
+        row.schedule_time = schedule_time
+        db.session.add(row)
+        db.session.flush()
+        created.append(_plan_day_public(row))
+
+    db.session.commit()
+    if len(created) == 1:
+        return jsonify(created[0]), 201
+    return jsonify({'assignments': created}), 201
+
+
+@workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['GET'])
+@require_auth
+def list_plan_assignments(plan_id):
+    plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
+    if plan is None:
+        return jsonify({'error': 'Workout plan not found'}), 404
+
+    rows = (
+        db.session.query(WorkoutPlanDays)
+        .filter(WorkoutPlanDays.workout_plan_id == plan_id)
+        .order_by(WorkoutPlanDays.id.asc())
+        .all()
+    )
+    return jsonify([_plan_day_public(r) for r in rows]), 200
+
+
+@workouts_blueprint.route('/workout-plan-assignments/<int:assignment_id>', methods=['DELETE'])
+@require_auth
+def delete_plan_assignment(assignment_id):
+    assignment = db.session.query(WorkoutPlanDays).filter(WorkoutPlanDays.id == assignment_id).first()
+    if assignment is None:
+        return jsonify({'error': 'Workout plan assignment not found'}), 404
+
+    db.session.delete(assignment)
+    db.session.commit()
+    return jsonify({'message': 'Deleted'}), 200
+
+
+@workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['PUT'])
+@require_auth
+def update_workout_plan_exercise(workout_plan_exercise_id):
+    pe = db.session.query(WorkoutPlanExercises).filter(
+        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
+    ).first()
+    if pe is None:
+        return jsonify({'error': 'Workout plan exercise not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    if 'exercise_id' in body:
+        eid = _int_or_none(body.get('exercise_id'))
+        if eid is None or not _exercise_exists(eid):
+            return jsonify({'error': 'Invalid exercise_id'}), 400
+
+    _apply_plan_exercise_fields(pe, body)
+    db.session.commit()
+    return jsonify({'message': 'Updated'}), 200
+
+
+@workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['DELETE'])
+@require_auth
+def delete_workout_plan_exercise(workout_plan_exercise_id):
+    pe = db.session.query(WorkoutPlanExercises).filter(
+        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
+    ).first()
+    if pe is None:
+        return jsonify({'error': 'Workout plan exercise not found'}), 404
+
+    db.session.delete(pe)
+    db.session.commit()
+    return jsonify({'message': 'Deleted'}), 200
+
+
+@workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['DELETE'])
+@require_auth
+def delete_workout_plan(plan_id):
+    plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
+    if plan is None:
+        return jsonify({'error': 'Workout plan not found'}), 404
+
+    db.session.delete(plan)
+    db.session.commit()
+    return jsonify({'message': 'Workout plan deleted'}), 200
+
+
 # --- Workout sessions ---
 
 
@@ -356,6 +610,15 @@ def create_workout():
     w.title = str(title).strip()
     w.workout_type_id = _int_or_none(body.get('workout_type_id'))
     w.workout_plan_id = _int_or_none(body.get('workout_plan_id'))
+    w.notes = body.get('notes')
+    w.mood = _int_or_none(body.get('mood'))
+    w.duration_mins = _int_or_none(body.get('duration_mins'))
+    completion_date_raw = body.get('completion_date')
+    if completion_date_raw is not None:
+        parsed_completion_date = _parse_datetime_or_none(completion_date_raw)
+        if parsed_completion_date is None:
+            return jsonify({'error': 'completion_date must be a valid ISO datetime'}), 400
+        w.completion_date = parsed_completion_date
 
     if w.workout_type_id is not None:
         if db.session.query(WorkoutTypes).filter(WorkoutTypes.workout_type_id == w.workout_type_id).first() is None:
@@ -373,6 +636,10 @@ def create_workout():
         'title': w.title,
         'workout_type_id': w.workout_type_id,
         'workout_plan_id': w.workout_plan_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
+        'completion_date': _serialize_datetime(w.completion_date),
     }), 201
 
 
@@ -388,11 +655,25 @@ def create_workout_from_plan(plan_id):
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
 
+    body = request.get_json(silent=True) or {}
+    completion_date_raw = body.get('completion_date')
+    parsed_completion_date = _parse_datetime_or_none(completion_date_raw) if completion_date_raw is not None else None
+    if completion_date_raw is not None and parsed_completion_date is None:
+        return jsonify({'error': 'completion_date must be a valid ISO datetime'}), 400
+
     w = Workouts()
     w.user_id = g.user.user_id
     w.title = plan.title
     w.workout_type_id = plan.workout_type_id
     w.workout_plan_id = plan.workout_plan_id
+    w.notes = body.get('notes')
+    w.mood = _int_or_none(body.get('mood'))
+    w.duration_mins = (
+        _int_or_none(body.get('duration_mins'))
+        if body.get('duration_mins') is not None
+        else plan.duration_min
+    )
+    w.completion_date = parsed_completion_date
     db.session.add(w)
     db.session.flush()
 
@@ -413,7 +694,47 @@ def create_workout_from_plan(plan_id):
         db.session.add(we)
 
     db.session.commit()
-    return jsonify({'workout_id': w.workout_id}), 201
+    return jsonify({
+        'workout_id': w.workout_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
+        'completion_date': _serialize_datetime(w.completion_date),
+    }), 201
+
+
+@workouts_blueprint.route('/workouts/<int:workout_id>', methods=['PATCH'])
+@require_auth
+def update_workout(workout_id):
+    w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
+    if w is None:
+        return jsonify({'error': 'Workout not found'}), 404
+    if w.user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to modify this workout'}), 403
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    if 'completion_date' in body:
+        completion_date_raw = body.get('completion_date')
+        if completion_date_raw is None:
+            w.completion_date = None
+        else:
+            parsed_completion_date = _parse_datetime_or_none(completion_date_raw)
+            if parsed_completion_date is None:
+                return jsonify({'error': 'completion_date must be a valid ISO datetime'}), 400
+            w.completion_date = parsed_completion_date
+
+    if 'notes' in body:
+        w.notes = body.get('notes')
+    if 'mood' in body:
+        w.mood = _int_or_none(body.get('mood'))
+    if 'duration_mins' in body:
+        w.duration_mins = _int_or_none(body.get('duration_mins'))
+
+    db.session.commit()
+    return jsonify({'message': 'Workout updated'}), 200
 
 
 @workouts_blueprint.route('/workouts', methods=['GET'])
@@ -427,12 +748,90 @@ def list_user_workouts():
         return jsonify({'error': 'You can only list your own workouts'}), 403
 
     rows = (
-        db.session.query(Workouts.workout_id, Workouts.title)
+        db.session.query(
+            Workouts.workout_id,
+            Workouts.title,
+            Workouts.notes,
+            Workouts.mood,
+            Workouts.duration_mins,
+            Workouts.completion_date,
+        )
         .filter(Workouts.user_id == uid)
         .order_by(Workouts.workout_id.desc())
         .all()
     )
-    return jsonify([{'workout_id': r.workout_id, 'title': r.title} for r in rows]), 200
+    response = [
+        {
+            'workout_id': r.workout_id,
+            'title': r.title,
+            'notes': r.notes,
+            'mood': r.mood,
+            'duration_mins': r.duration_mins,
+            'completion_date': _serialize_datetime(r.completion_date),
+        }
+        for r in rows
+    ]
+    print(f"[WORKOUTS DEBUG] GET /workouts user_id={uid} count={len(response)}", flush=True)
+    print(f"[WORKOUTS DEBUG] GET /workouts response: {response}", flush=True)
+    return jsonify(response), 200
+
+
+@workouts_blueprint.route('/workouts/weekly-assignments', methods=['GET'])
+@workouts_blueprint.route('/workouts/current-week', methods=['GET'])
+@require_auth
+def list_user_weekly_assignments():
+    uid_raw = request.args.get('user_id')
+    uid = _parse_uuid(uid_raw)
+    if uid is None:
+        return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
+    if uid != g.user.user_id:
+        return jsonify({'error': 'You can only list your own workouts'}), 403
+
+    rows = (
+        db.session.query(
+            Workouts.workout_id,
+            Workouts.title,
+            Workouts.notes,
+            Workouts.mood,
+            Workouts.duration_mins,
+            Workouts.completion_date,
+            Workouts.workout_plan_id,
+            WorkoutPlanDays.id,
+            WorkoutPlanDays.weekday,
+            WorkoutPlanDays.schedule_time,
+        )
+        .outerjoin(WorkoutPlanDays, WorkoutPlanDays.workout_plan_id == Workouts.workout_plan_id)
+        .filter(Workouts.user_id == uid)
+        .filter(WorkoutPlanDays.id.isnot(None))
+        .order_by(WorkoutPlanDays.weekday.asc(), WorkoutPlanDays.schedule_time.asc(), Workouts.workout_id.asc())
+        .all()
+    )
+
+    by_workout = {}
+    for r in rows:
+        item = by_workout.get(r.workout_id)
+        if item is None:
+            item = {
+                'workout_id': r.workout_id,
+                'title': r.title,
+                'workout_plan_id': r.workout_plan_id,
+                'notes': r.notes,
+                'mood': r.mood,
+                'duration_mins': r.duration_mins,
+                'completion_date': _serialize_datetime(r.completion_date),
+                'assignments': [],
+            }
+            by_workout[r.workout_id] = item
+        item['assignments'].append({
+            'id': r.id,
+            'weekday': r.weekday,
+            'schedule_time': _serialize_time(r.schedule_time),
+        })
+
+    response = list(by_workout.values())
+    print(f"[WORKOUTS DEBUG] GET /workouts/weekly-assignments user_id={uid} count={len(response)}", flush=True)
+    print(f"[WORKOUTS DEBUG] GET /workouts/weekly-assignments response: {response}", flush=True)
+    return jsonify(response), 200
 
 
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
@@ -443,14 +842,22 @@ def get_workout(workout_id):
         return jsonify({'error': 'Workout not found'}), 404
 
     exercises = sorted(w.workout_exercises, key=lambda x: (x.position, x.workout_exercise_id))
-    return jsonify({
+    response = {
         'workout_id': w.workout_id,
         'user_id': str(w.user_id),
         'title': w.title,
         'workout_type_id': w.workout_type_id,
         'workout_plan_id': w.workout_plan_id,
+        'notes': w.notes,
+        'mood': w.mood,
+        'duration_mins': w.duration_mins,
+        'completion_date': _serialize_datetime(w.completion_date),
+        'assignments': [_plan_day_public(d) for d in sorted(w.workout_plan.workout_plan_days, key=lambda x: x.id)] if w.workout_plan else [],
         'exercises': [_workout_exercise_public(we) for we in exercises],
-    }), 200
+    }
+    print(f"[WORKOUTS DEBUG] GET /workouts/{workout_id} user_id={g.user.user_id}", flush=True)
+    print(f"[WORKOUTS DEBUG] GET /workouts/{workout_id} response: {response}", flush=True)
+    return jsonify(response), 200
 
 
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['DELETE'])
