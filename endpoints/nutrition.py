@@ -195,6 +195,76 @@ def unlog_plan(meal_plan_id):
     return jsonify({'message': 'Plan unlogged as eaten'}), 200
 
 
+@nutrition_blueprint.route('/history')
+@require_auth
+def history():
+    timezone_string = request.args.get('timezone')
+    user_id = request.args.get('user_id')
+    days = request.args.get('days', default=7, type=int)
+
+    try:
+        user_id = UUID(user_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'user_id parameter is invalid'}), 400
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 401
+
+    if timezone_string is None:
+        return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
+
+    if days is None or days < 1 or days > 366:
+        return jsonify({'error': 'days must be an integer between 1 and 366'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone_string parameter is not valid'}), 400
+
+    now_local = datetime.now(local_tz)
+    local_start_date = now_local.date() - timedelta(days=days - 1)
+    local_start_dt = datetime.combine(local_start_date, time.min, tzinfo=local_tz)
+    local_end_dt = datetime.combine(now_local.date() + timedelta(days=1), time.min, tzinfo=local_tz)
+
+    utc_start = local_start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+    meal_plans = (
+        db.session.query(MealPlans)
+        .filter(MealPlans.user_id == user_id)
+        .filter(MealPlans.logged_datetime >= utc_start, MealPlans.logged_datetime < utc_end)
+        .all()
+    )
+
+    totals_by_local_day = {}
+    for offset in range(days):
+        d = local_start_date + timedelta(days=offset)
+        totals_by_local_day[d.isoformat()] = 0
+
+    for mp in meal_plans:
+        logged_dt = getattr(mp, 'logged_datetime', None)
+        if logged_dt is None:
+            continue
+
+        local_day_key = logged_dt.replace(tzinfo=timezone.utc).astimezone(local_tz).date().isoformat()
+        if local_day_key not in totals_by_local_day:
+            continue
+
+        for mpf in mp.meal_plan_foods:
+            calories = float(getattr(mpf, 'calories', 0) or 0)
+            serving_size = float(getattr(mpf, 'serving_size', 0) or 0)
+            totals_by_local_day[local_day_key] += calories * (serving_size / 100.0)
+
+    return jsonify([
+        {
+            'date_submitted': day_key,
+            'daily_total_calories': round(total_cals, 2),
+        }
+        for day_key, total_cals in totals_by_local_day.items()
+    ]), 200
+
+
+
 @nutrition_blueprint.route('/today')
 @require_auth
 def today():
