@@ -1,4 +1,4 @@
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request, g
 
 nutrition_blueprint = Blueprint('nutrition', __name__)
 
-def _get_utc_day_bounds(tz_name):
+def _get_past_utc_bounds(tz_name, delta_days):
     try:
         local_tz = ZoneInfo(tz_name)
     except (ValueError, TypeError):
@@ -17,17 +17,17 @@ def _get_utc_day_bounds(tz_name):
 
     now_local = datetime.now(local_tz)
 
-    local_day_start = datetime.combine(
+    local_days_start = datetime.combine(
         now_local.date(),
         time.min,
         tzinfo=local_tz
     )
 
-    local_day_end = local_day_start + timedelta(days=1)
+    local_days_end = local_days_start + timedelta(days=delta_days)
 
     return (
-        local_day_start.astimezone(timezone.utc),
-        local_day_end.astimezone(timezone.utc)
+        local_days_start.astimezone(timezone.utc),
+        local_days_end.astimezone(timezone.utc)
     )
 
 @nutrition_blueprint.route('/plans/create', methods=['POST'])
@@ -133,6 +133,31 @@ def add_food(meal_plan_id):
 
     return jsonify({'result': 'Food added'}), 201
 
+
+@nutrition_blueprint.route('/plans/<meal_plan_id>/remove_food', methods=['DELETE'])
+@require_auth
+def remove_food(meal_plan_id):
+    meal_plan = db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first()
+
+    if not can_access_client_endpoint(g.user, meal_plan.user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to modify this content'}), 401
+
+    fdc_ic = request.args.get('fdc_id')
+
+    if fdc_ic is None:
+        return jsonify({'error': 'fdc_id is a required parameter'}), 400
+
+    foods = meal_plan.meal_plan_foods
+
+    for f in foods:
+        if f.fdc_id == fdc_ic:
+            db.session.delete(f)
+            break
+
+    db.session.commit()
+
+    return jsonify({'message': 'Food removed'}), 200
+
 @nutrition_blueprint.route('/plans/<meal_plan_id>/log_eaten', methods=['POST'])
 @require_auth
 def log_eaten(meal_plan_id):
@@ -153,6 +178,23 @@ def log_eaten(meal_plan_id):
         'logged_datetime': str(meal_plan.logged_datetime.isoformat()),
     }), 200
 
+
+@nutrition_blueprint.route('/plans/<meal_plan_id>/unlog_eaten', methods=['POST'])
+@require_auth
+def unlog_plan(meal_plan_id):
+    meal_plan = db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first()
+
+    if not can_access_client_endpoint(g.user, meal_plan.user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to modify this content'}), 401
+
+    meal_plan.eaten = False
+    meal_plan.logged_datetime = None
+
+    db.session.commit()
+
+    return jsonify({'message': 'Plan unlogged as eaten'}), 200
+
+
 @nutrition_blueprint.route('/today')
 @require_auth
 def today():
@@ -170,7 +212,7 @@ def today():
     if timezone_string is None:
         return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
 
-    tz_start, tz_end = _get_utc_day_bounds(timezone_string)
+    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 1)
 
     if tz_start is None or tz_end is None:
         return jsonify({'error': 'timezone_string parameter is not valid'}), 400
@@ -200,6 +242,43 @@ def today():
         'daily_total_calories': total_cals
     })
 
+@nutrition_blueprint.route('/week')
+@require_auth
+def week():
+    timezone_string = request.args.get('timezone')
+    user_id = request.args.get('user_id')
+
+    try:
+        user_id = UUID(user_id)
+    except ValueError:
+        return jsonify({'error': 'user_id parameter is invalid'}), 400
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 401
+
+    if timezone_string is None:
+        return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
+
+    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 7)
+
+    tz_start = tz_start.replace(tzinfo=None)
+    tz_end = tz_end.replace(tzinfo=None)
+
+    meal_plans = db.session.query(MealPlans).filter(MealPlans.user_id == user_id).filter(MealPlans.logged_datetime >= tz_start, MealPlans.logged_datetime < tz_end).all()
+
+    return jsonify({
+        'meal_plans': [{
+            'meal_plan_id': mp.meal_plan_id,
+            'meal_type': mp.meal_type_id,
+            'meal_logged_at': str(mp.logged_datetime.isoformat()),
+            'meal_plan_foods': [{
+                'fdc_id': f.fdc_id,
+                'food_name': f.food_name,
+                'calories': f.calories,
+                'portion_size': f.serving_size,
+            } for f in mp.meal_plan_foods]
+        } for mp in meal_plans],
+    })
 
 @nutrition_blueprint.route('/plans/plans_by_user')
 @require_auth
