@@ -1,9 +1,10 @@
 from decimal import Decimal
-from datetime import datetime, time
+from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from models import (
@@ -119,6 +120,23 @@ def _serialize_time(val):
     if isinstance(val, time):
         return val.isoformat()
     return str(val)
+
+
+def _require_authorized_user_id():
+    uid_raw = request.args.get('user_id')
+    uid = _parse_uuid(uid_raw)
+    if uid is None:
+        return None, (jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400)
+    if uid != g.user.user_id:
+        return None, (jsonify({'error': 'You can only list your own workouts'}), 403)
+    return uid, None
+
+
+def _validated_days_param():
+    days = request.args.get('days', default=7, type=int)
+    if days is None or days < 1 or days > 366:
+        return None, (jsonify({'error': 'days must be an integer between 1 and 366'}), 400)
+    return days, None
 
 
 def _workout_exercise_public(we: WorkoutExercises):
@@ -774,6 +792,128 @@ def list_user_workouts():
     print(f"[WORKOUTS DEBUG] GET /workouts user_id={uid} count={len(response)}", flush=True)
     print(f"[WORKOUTS DEBUG] GET /workouts response: {response}", flush=True)
     return jsonify(response), 200
+
+
+@workouts_blueprint.route('/workouts/history/sets-logged', methods=['GET'])
+@require_auth
+def workout_sets_logged_history():
+    uid, uid_err = _require_authorized_user_id()
+    if uid_err is not None:
+        return uid_err
+
+    days, days_err = _validated_days_param()
+    if days_err is not None:
+        return days_err
+
+    cutoff = date.today() - timedelta(days=days - 1)
+    cutoff_dt = datetime.combine(cutoff, time.min)
+
+    rows = (
+        db.session.query(
+            Workouts.workout_id,
+            Workouts.completion_date,
+            func.coalesce(func.sum(WorkoutExercises.sets), 0).label('sets_logged'),
+        )
+        .outerjoin(WorkoutExercises, WorkoutExercises.workout_id == Workouts.workout_id)
+        .filter(Workouts.user_id == uid)
+        .filter(Workouts.completion_date.isnot(None))
+        .filter(Workouts.completion_date >= cutoff_dt)
+        .group_by(Workouts.workout_id, Workouts.completion_date)
+        .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
+        .all()
+    )
+
+    return jsonify([
+        {
+            'workout_id': r.workout_id,
+            'sets_logged': int(r.sets_logged or 0),
+            'completion_date': _serialize_datetime(r.completion_date),
+        }
+        for r in rows
+    ]), 200
+
+
+@workouts_blueprint.route('/workouts/history/total-workout-time', methods=['GET'])
+@require_auth
+def workout_total_time_history():
+    uid, uid_err = _require_authorized_user_id()
+    if uid_err is not None:
+        return uid_err
+
+    days, days_err = _validated_days_param()
+    if days_err is not None:
+        return days_err
+
+    cutoff = date.today() - timedelta(days=days - 1)
+    cutoff_dt = datetime.combine(cutoff, time.min)
+
+    rows = (
+        db.session.query(
+            Workouts.workout_id,
+            Workouts.duration_mins,
+            Workouts.completion_date,
+        )
+        .filter(Workouts.user_id == uid)
+        .filter(Workouts.completion_date.isnot(None))
+        .filter(Workouts.completion_date >= cutoff_dt)
+        .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
+        .all()
+    )
+
+    return jsonify([
+        {
+            'workout_id': r.workout_id,
+            'total_workout_time': r.duration_mins,
+            'completion_date': _serialize_datetime(r.completion_date),
+        }
+        for r in rows
+    ]), 200
+
+
+@workouts_blueprint.route('/workouts/history/total-volume', methods=['GET'])
+@require_auth
+def workout_total_volume_history():
+    uid, uid_err = _require_authorized_user_id()
+    if uid_err is not None:
+        return uid_err
+
+    days, days_err = _validated_days_param()
+    if days_err is not None:
+        return days_err
+
+    cutoff = date.today() - timedelta(days=days - 1)
+    cutoff_dt = datetime.combine(cutoff, time.min)
+
+    rows = (
+        db.session.query(
+            Workouts.workout_id,
+            Workouts.completion_date,
+            func.coalesce(
+                func.sum(
+                    func.coalesce(WorkoutExercises.weight, 0)
+                    * func.coalesce(WorkoutExercises.sets, 0)
+                    * func.coalesce(WorkoutExercises.reps, 0)
+                ),
+                0,
+            ).label('total_volume'),
+        )
+        .outerjoin(WorkoutExercises, WorkoutExercises.workout_id == Workouts.workout_id)
+        .filter(Workouts.user_id == uid)
+        .filter(Workouts.completion_date.isnot(None))
+        .filter(Workouts.completion_date >= cutoff_dt)
+        .group_by(Workouts.workout_id, Workouts.completion_date)
+        .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
+        .all()
+    )
+
+    return jsonify([
+        {
+            'workout_id': r.workout_id,
+            'total_volume': _serialize_decimal(r.total_volume),
+            'completion_date': _serialize_datetime(r.completion_date),
+        }
+        for r in rows
+    ]), 200
 
 
 @workouts_blueprint.route('/workouts/weekly-assignments', methods=['GET'])
