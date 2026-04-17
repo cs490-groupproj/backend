@@ -95,8 +95,8 @@ def coaches(user_id):
                             type: boolean
                         is_nutrition_specialization:
                             type: boolean
-            400:
-                description: UUID is invalid
+        400:
+            description: UUID is invalid
     """
     user = g.user
 
@@ -456,22 +456,23 @@ def get_daily_survey_history(user_id):
     responses:
         200:
             description: Daily survey history
-            type: array
-            items:
-                type: object
-                properties:
-                    daily_survey_id:
-                        type: integer
-                    mood:
-                        type: integer
-                    energy:
-                        type: integer
-                    sleep:
-                        type: integer
-                    notes:
-                        type: string
-                    date_submitted:
-                        type: string
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        daily_survey_id:
+                            type: integer
+                        mood:
+                            type: integer
+                        energy:
+                            type: integer
+                        sleep:
+                            type: integer
+                        notes:
+                            type: string
+                        date_submitted:
+                            type: string
         400:
             description: Invalid UUID or day
     """

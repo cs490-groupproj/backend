@@ -33,6 +33,45 @@ def _get_past_utc_bounds(tz_name, delta_days):
 @nutrition_blueprint.route('/plans/create', methods=['POST'])
 @require_auth
 def create_nutrition_plan():
+    """
+    Create meal plan
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            required:
+                - name
+            properties:
+                user_id:
+                    type: string
+                    required: true
+                meal_type_id:
+                    type: integer
+                    required: true
+                meal_datetime:
+                    type: string
+                    required: true
+    responses:
+        201:
+            description: Created meal plan
+            schema:
+                type: object
+                properties:
+                    meal_plan_id:
+                        type: integer
+                    meal_type_id:
+                        type: integer
+                    meal_datetime:
+                        type: string
+                    eaten:
+                        type: boolean
+        400:
+            description: Missing or invalid parameters
+    """
 
     user_id = request.json.get('user_id')
     meal_type_id = request.json.get('meal_type_id')
@@ -78,12 +117,48 @@ def create_nutrition_plan():
         'meal_plan_id': new_plan.meal_plan_id,
         'meal_type_id': new_plan.meal_type_id,
         'meal_datetime': str(new_plan.meal_datetime),
-        'eaten': str(new_plan.eaten).lower(),
+        'eaten': new_plan.eaten,
     }), 201
 
 @nutrition_blueprint.route('/plans/<meal_plan_id>')
 @require_auth
 def get_meal_plan(meal_plan_id):
+    """
+    Get meal plan
+    ---
+    tags:
+        - Nutrition
+    responses:
+        200:
+            description: Get meal plan
+            schema:
+                type: object
+                properties:
+                    meal_plan_id:
+                        type: integer
+                    meal_type_id:
+                        type: integer
+                    meal_datetime:
+                        type: string
+                    eaten:
+                        type: boolean
+                    meal_plan_foods:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                fdc_id:
+                                    type: integer
+                                food_name:
+                                    type: string
+                                calories:
+                                    type: integer
+                                servingSize:
+                                    type: integer
+
+        400:
+            description: Missing or invalid parameters
+    """
 
     meal_plan = (db.session.query(MealPlans).outerjoin(MealPlanFoods).filter(MealPlans.meal_plan_id == meal_plan_id).first())
     user_id = meal_plan.user_id
@@ -94,6 +169,7 @@ def get_meal_plan(meal_plan_id):
     return jsonify({
         'meal_plan_id': meal_plan.meal_plan_id,
         'meal_type_id': meal_plan.meal_type_id,
+        'eaten': meal_plan.eaten,
         'meal_plan_foods': [
             {
                 'fdcId': f.fdc_id,
@@ -107,7 +183,42 @@ def get_meal_plan(meal_plan_id):
 @nutrition_blueprint.route('/plans/<meal_plan_id>/add_food', methods=['POST'])
 @require_auth
 def add_food(meal_plan_id):
-
+    """
+    Add food to meal plan
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            required:
+                - name
+            properties:
+                fdc_id:
+                    type: integer
+                    required: true
+                food_name:
+                    type: string
+                    required: true
+                calories:
+                    type: integer
+                    required: true
+                portion_size:
+                    type: integer
+                    required: true
+    responses:
+        201:
+            description: Food added
+            schema:
+                type: object
+                properties:
+                    result:
+                        type: string
+        400:
+            description: Missing or invalid parameters
+    """
     meal_plan = (db.session.query(MealPlans).outerjoin(MealPlanFoods).filter(MealPlans.meal_plan_id == meal_plan_id).first())
     user_id = meal_plan.user_id
 
@@ -137,6 +248,28 @@ def add_food(meal_plan_id):
 @nutrition_blueprint.route('/plans/<meal_plan_id>/remove_food', methods=['DELETE'])
 @require_auth
 def remove_food(meal_plan_id):
+    """
+    Remove food
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: fdc_id
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Delete food item
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        400:
+            description: Missing or invalid parameters
+    """
     meal_plan = db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first()
 
     if not can_access_client_endpoint(g.user, meal_plan.user_id, g.clients_ids):
@@ -161,6 +294,22 @@ def remove_food(meal_plan_id):
 @nutrition_blueprint.route('/plans/<meal_plan_id>/log_eaten', methods=['POST'])
 @require_auth
 def log_eaten(meal_plan_id):
+    """
+    Log eaten
+    ---
+    tags:
+        - Nutrition
+    responses:
+        200:
+            description: Logged as eaten
+            schema:
+                type: object
+                properties:
+                    meal_plan_id:
+                        type: integer
+                    logged_datetime:
+                        type: string
+    """
 
     meal_plan = (db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first())
     user_id = meal_plan.user_id
@@ -182,6 +331,20 @@ def log_eaten(meal_plan_id):
 @nutrition_blueprint.route('/plans/<meal_plan_id>/unlog_eaten', methods=['POST'])
 @require_auth
 def unlog_plan(meal_plan_id):
+    """
+    Unlog eaten
+    ---
+    tags:
+        - Nutrition
+    responses:
+        200:
+            description: Unlogged as eaten
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+    """
     meal_plan = db.session.query(MealPlans).filter(MealPlans.meal_plan_id == meal_plan_id).first()
 
     if not can_access_client_endpoint(g.user, meal_plan.user_id, g.clients_ids):
@@ -198,6 +361,39 @@ def unlog_plan(meal_plan_id):
 @nutrition_blueprint.route('/history')
 @require_auth
 def history():
+    """
+   Get meal plan history
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: timezone
+          in: path
+          required: true
+          type: string
+        - name: user_id
+          in: path
+          required: true
+          type: string
+        - name: days
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get calories by day
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        date_submitted:
+                            type: string
+                        daily_total_calories:
+                            type: number
+        400:
+            description: Missing or invalid parameters
+    """
     timezone_string = request.args.get('timezone')
     user_id = request.args.get('user_id')
     days = request.args.get('days', default=7, type=int)
@@ -268,6 +464,53 @@ def history():
 @nutrition_blueprint.route('/today')
 @require_auth
 def today():
+    """
+   Get today's meal plans
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: timezone
+          in: path
+          required: true
+          type: string
+        - name: user_id
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get meal plans by day
+            schema:
+                type: object
+                properties:
+                    meal_plans:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                meal_plan_id:
+                                    type: integer
+                                meal_type:
+                                    type: integer
+                                meal_plan_foods:
+                                    type: array
+                                    items:
+                                        type: object
+                                        properties:
+                                            fdc_id:
+                                                type: integer
+                                            food_name:
+                                                type: string
+                                            calories:
+                                                type: integer
+                                            portion_size:
+                                                type: integer
+                    daily_total_calories:
+                        type: integer
+        400:
+            description: Missing or invalid parameters
+    """
     timezone_string = request.args.get('timezone')
     user_id = request.args.get('user_id')
 
@@ -315,6 +558,39 @@ def today():
 @nutrition_blueprint.route('/plans/plans_by_user')
 @require_auth
 def plans_by_user():
+    """
+    Get meal plans by user
+    ---
+    tags:
+        - Nutrition
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+    responses:
+        200:
+            description: Get meal plans by day
+            schema:
+                type: object
+                properties:
+                    meal_plans:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                meal_plan_id:
+                                    type: integer
+                                meal_plan_foods:
+                                    type: array
+                                    items:
+                                        type: object
+                                        properties:
+                                            fdc_id:
+                                                type: integer
+        400:
+            description: Missing or invalid parameters
+    """
     user_id = request.args.get('user_id')
 
     if user_id is None:
