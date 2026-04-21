@@ -91,6 +91,18 @@ def search():
                 'coaches': [_build_coach_json(c) for c in coaches]
             })
 
+@coach_blueprint.route('/clients')
+@require_auth
+def my_clients():
+    relationships = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
+
+    return jsonify({
+        'clients': [{
+            'client_id': r.client.user_id,
+            'first_name': r.client.first_name,
+            'last_name': r.client.last_name
+        } for r in relationships]
+    })
 
 @coach_blueprint.route('/<coach_id>/request', methods=['POST'])
 @require_auth
