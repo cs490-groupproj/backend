@@ -15,15 +15,8 @@ def _get_past_utc_bounds(tz_name, delta_days):
     except (ValueError, TypeError):
         return None, None
 
-    now_local = datetime.now(local_tz)
-
-    local_days_start = datetime.combine(
-        now_local.date(),
-        time.min,
-        tzinfo=local_tz
-    )
-
-    local_days_end = local_days_start + timedelta(days=delta_days)
+    local_days_end = datetime.now(local_tz)
+    local_days_start = datetime.combine(local_days_end - timedelta(days=delta_days), time.min, tzinfo=local_tz)
 
     return (
         local_days_start.astimezone(timezone.utc),
@@ -553,6 +546,44 @@ def today():
             } for f in mp.meal_plan_foods]
         } for mp in meal_plans],
         'daily_total_calories': total_cals
+    })
+
+@nutrition_blueprint.route('/week')
+@require_auth
+def week():
+    timezone_string = request.args.get('timezone')
+    user_id = request.args.get('user_id')
+
+    try:
+        user_id = UUID(user_id)
+    except ValueError:
+        return jsonify({'error': 'user_id parameter is invalid'}), 400
+
+    if not can_access_client_endpoint(g.user, user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 401
+
+    if timezone_string is None:
+        return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
+
+    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 7)
+
+    tz_start = tz_start.replace(tzinfo=None)
+    tz_end = tz_end.replace(tzinfo=None)
+
+    meal_plans = db.session.query(MealPlans).filter(MealPlans.user_id == user_id).filter(MealPlans.logged_datetime >= tz_start, MealPlans.logged_datetime < tz_end).all()
+
+    return jsonify({
+        'meal_plans': [{
+            'meal_plan_id': mp.meal_plan_id,
+            'meal_type': mp.meal_type_id,
+            'meal_logged_at': str(mp.logged_datetime.isoformat()),
+            'meal_plan_foods': [{
+                'fdc_id': f.fdc_id,
+                'food_name': f.food_name,
+                'calories': f.calories,
+                'portion_size': f.serving_size,
+            } for f in mp.meal_plan_foods]
+        } for mp in meal_plans],
     })
 
 @nutrition_blueprint.route('/plans/plans_by_user')
