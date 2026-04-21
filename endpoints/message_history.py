@@ -12,6 +12,29 @@ message_blueprint = Blueprint("message_blueprint", __name__)
 @message_blueprint.route("/unread_message_count")
 @require_auth
 def unread_messages():
+    """
+    Get unread message count
+    ---
+    tags:
+        - Messages
+    responses:
+        200:
+            description: Get unread message counts by conversation
+            schema:
+                type: object
+                properties:
+                    unread_message_counts:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                message_sender_id:
+                                    type: string
+                                message_sender_name:
+                                    type: string
+                                unread_count:
+                                    type: integer
+    """
     user_id = g.user.user_id
     messages = (
         db.session.query(
@@ -44,6 +67,25 @@ def unread_messages():
 @message_blueprint.route("/mark_received", methods=["POST"])
 @require_auth
 def mark_received():
+    """
+        Mark messages as received
+        ---
+        tags:
+            - Messages
+        parameters:
+            - name: other_party_user_id
+              in: path
+              required: true
+              type: string
+        responses:
+            200:
+                description: Marked all messages as read
+                schema:
+                    type: object
+                    properties:
+                        message:
+                            type: string
+        """
     user_id = g.user.user_id
     other_party_user_id = request.json.get("other_party_user_id")
 
@@ -63,6 +105,48 @@ def mark_received():
 @message_blueprint.route("/history")
 @require_auth
 def get_message_history():
+    """
+        Get message history
+        ---
+        tags:
+            - Messages
+        parameters:
+            - name: limit
+              in: path
+              required: true
+              type: integer
+            - name: offset
+              in: path
+              required: true
+              type: integer
+            - name: other_party_user_id
+              in: path
+              required: true
+              type: string
+        responses:
+            200:
+                description: Get a user's message history, ordered by date descending
+                schema:
+                    type: object
+                    properties:
+                        messages:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    message_sender:
+                                        type: string
+                                    message_recipient:
+                                        type: string
+                                    message_body:
+                                        type: string
+                                    sent_date:
+                                        type: string
+                                    read_by_recipient:
+                                        type: boolean
+            400:
+                description: Error with parameters
+        """
     limit = request.args.get("limit")
     offset = request.args.get("offset")
     other_party_user_id = request.args.get("other_party_user_id")

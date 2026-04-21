@@ -5,6 +5,7 @@ import os
 import traceback
 import sys
 from flask_socketio import SocketIO
+from flasgger import Swagger
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, g
@@ -37,6 +38,11 @@ def create_app(config_overrides=None):
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
     # print(os.getenv("DATABASE_URI"))
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SWAGGER"] = {
+        'title': 'Optimal API',
+        'uiversion': 3,
+        'version': '1.0.0'
+    }
 
     if config_overrides:
         app.config.update(config_overrides)
@@ -58,6 +64,22 @@ def create_app(config_overrides=None):
 
     @app.route('/')
     def hello_world():  # put application's code here
+        """
+        Get a list of all exercise categories
+        ---
+        tags:
+            - Testing
+        responses:
+            200:
+                description: List of exercise categories
+                schema:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            name:
+                                type: string
+        """
         test = (
             db.session.query(ExerciseCategories)
             .all()
@@ -68,6 +90,22 @@ def create_app(config_overrides=None):
     @app.route('/authtest')
     @require_auth
     def auth_required():
+        """
+        Get user's email and first name
+        ---
+        tags:
+            - Testing
+        responses:
+            200:
+                description: User's email and first name
+                schema:
+                    type: object
+                    properties:
+                        message:
+                            type: string
+            401:
+                description: Unauthorized
+        """
         return jsonify({'message': f'You have successfully authenticated, {g.firebase_user.get("email")}. Your name is {g.user.first_name}'}), 200
 
     @app.errorhandler(404)
@@ -90,6 +128,8 @@ def create_app(config_overrides=None):
             'internal_error': traceback.format_exc().splitlines()[-1],
             'location': f'{tb.filename}:{tb.lineno} in {tb.name}'
         }), 500
+
+    Swagger(app)
 
     return app
 
