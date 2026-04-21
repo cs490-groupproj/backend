@@ -22,6 +22,7 @@ name: Build and deploy Python app to Azure Web App
 env:
   AZURE_WEBAPP_NAME: cs490-exerciseapp-api    # set this to the name of your Azure Web App
   PYTHON_VERSION: '3.12'                      # set this to the Python version to use
+  FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
 
 on:
   push:
@@ -51,10 +52,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Add Firebase credentials
-        run: |
-          mkdir secrets
-          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > secrets/cs490-exercise-app-firebase-adminsdk.json
 
       - name: Run unit tests
         run: pytest
