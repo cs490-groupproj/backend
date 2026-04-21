@@ -1,19 +1,19 @@
-from decimal import Decimal
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from uuid import UUID
 
-from auth.authentication import require_auth
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
+from auth.authentication import require_auth
 from models import (
     BodyParts,
     ExerciseCategories,
     Exercises,
     WorkoutExercises,
-    WorkoutPlanExercises,
     WorkoutPlanDays,
+    WorkoutPlanExercises,
     WorkoutPlans,
     Workouts,
     WorkoutTypes,
@@ -973,6 +973,46 @@ def list_user_weekly_assignments():
     print(f"[WORKOUTS DEBUG] GET /workouts/weekly-assignments response: {response}", flush=True)
     return jsonify(response), 200
 
+@workouts_blueprint.route("/workouts/my_schedule", methods=['GET'])
+@require_auth
+def get_user_schedule():
+    uid_raw = request.args.get('user_id')
+    target_uid = _parse_uuid(uid_raw)
+    requester_uid = g.user.user_id
+    if target_uid is None:
+        return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
+    if target_uid != requester_uid:
+        return jsonify({'error': 'You can only list your own workouts'}), 403
+    rows = (
+        db.session.query(
+            WorkoutPlanDays.id,
+            WorkoutPlanDays.weekday,
+            WorkoutPlanDays.schedule_time,
+            WorkoutPlans.workout_plan_id,
+            WorkoutPlans.title,
+            WorkoutPlans.duration_min
+        )
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanDays.workout_plan_id)
+        .filter(WorkoutPlans.created_by == target_uid)
+        .order_by(WorkoutPlanDays.weekday.desc(), WorkoutPlanDays.schedule_time.asc())
+        .all()
+    )
+
+    return jsonify(
+        {
+            "my_schedule": [
+                {
+                    'assignment_id': r.id,
+                    'weekday': r.weekday, 
+                    'schedule_time': _serialize_time(r.schedule_time),
+                    'workout_plan_id': r.workout_plan_id,
+                    'title': r.title,
+                    'duration_min': r.duration_min
+                }
+                for r in rows
+            ]
+        }
+    ), 200
 
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
 @require_auth
