@@ -15,15 +15,8 @@ def _get_past_utc_bounds(tz_name, delta_days):
     except (ValueError, TypeError):
         return None, None
 
-    now_local = datetime.now(local_tz)
-
-    local_days_start = datetime.combine(
-        now_local.date(),
-        time.min,
-        tzinfo=local_tz
-    )
-
-    local_days_end = local_days_start + timedelta(days=delta_days)
+    local_days_end = datetime.now(local_tz)
+    local_days_start = datetime.combine(local_days_end - timedelta(days=delta_days), time.min, tzinfo=local_tz)
 
     return (
         local_days_start.astimezone(timezone.utc),
