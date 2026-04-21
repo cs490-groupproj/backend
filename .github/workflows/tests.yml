@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
 
     steps:
       - name: Checkout code
@@ -22,11 +24,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
-
-      - name: Add Firebase credentials
-        run: |
-          mkdir secrets
-          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > secrets/cs490-exercise-app-firebase-adminsdk.json
 
       - name: Run tests
         run: |
