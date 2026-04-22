@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from auth.authentication import require_auth
+from auth.util import can_access_client_endpoint
 from models import (
     BodyParts,
     ExerciseCategories,
@@ -127,9 +128,25 @@ def _require_authorized_user_id():
     uid = _parse_uuid(uid_raw)
     if uid is None:
         return None, (jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400)
-    if uid != g.user.user_id:
+    if not can_access_client_endpoint(g.user, uid, g.clients_ids):
         return None, (jsonify({'error': 'You can only list your own workouts'}), 403)
     return uid, None
+
+
+def _can_access_user_id(user_id):
+    return can_access_client_endpoint(g.user, user_id, g.clients_ids)
+
+
+def _ensure_plan_access(plan: WorkoutPlans):
+    if plan.created_by is None or not _can_access_user_id(plan.created_by):
+        return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
+    return None
+
+
+def _ensure_workout_access(workout: Workouts):
+    if not _can_access_user_id(workout.user_id):
+        return jsonify({'error': 'You are not authorized to access this workout'}), 403
+    return None
 
 
 def _validated_days_param():
@@ -335,6 +352,7 @@ def get_exercise(exercise_id):
 def list_workout_plans():
     created_by_raw = request.args.get('created_by')
     q = db.session.query(WorkoutPlans)
+    accessible_user_ids = [g.user.user_id] + g.clients_ids
     if created_by_raw:
         if created_by_raw.strip().lower() == 'me':
             q = q.filter(WorkoutPlans.created_by == g.user.user_id)
@@ -342,7 +360,11 @@ def list_workout_plans():
             created_by_uuid = _parse_uuid(created_by_raw)
             if created_by_uuid is None:
                 return jsonify({'error': 'created_by must be a valid UUID or "me"'}), 400
+            if not _can_access_user_id(created_by_uuid):
+                return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
             q = q.filter(WorkoutPlans.created_by == created_by_uuid)
+    else:
+        q = q.filter(WorkoutPlans.created_by.in_(accessible_user_ids))
 
     rows = q.order_by(WorkoutPlans.title).all()
     return jsonify([
@@ -370,6 +392,9 @@ def get_workout_plan(plan_id):
     )
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
     exercises = sorted(plan.workout_plan_exercises, key=lambda x: (x.position, x.workout_plan_exercise_id))
     return jsonify({
         'workout_plan_id': plan.workout_plan_id,
@@ -401,6 +426,8 @@ def create_workout_plan():
         uid = _parse_uuid(created_by)
         if uid is None:
             return jsonify({'error': 'Invalid created_by user id'}), 400
+        if not _can_access_user_id(uid):
+            return jsonify({'error': 'You are not authorized to create a workout plan for this user'}), 403
         plan.created_by = uid
     else:
         plan.created_by = g.user.user_id
@@ -420,6 +447,9 @@ def update_workout_plan(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
     if not body:
@@ -452,6 +482,8 @@ def update_workout_plan(plan_id):
             uid = _parse_uuid(created_by)
             if uid is None:
                 return jsonify({'error': 'Invalid created_by user id'}), 400
+            if not _can_access_user_id(uid):
+                return jsonify({'error': 'You are not authorized to set this workout plan owner'}), 403
             plan.created_by = uid
 
     db.session.commit()
@@ -464,6 +496,9 @@ def add_plan_exercises(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
     items = body.get('exercises')
@@ -493,6 +528,9 @@ def add_plan_assignments(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
     items = body.get('assignments')
@@ -535,6 +573,9 @@ def list_plan_assignments(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     rows = (
         db.session.query(WorkoutPlanDays)
@@ -548,11 +589,19 @@ def list_plan_assignments(plan_id):
 @workouts_blueprint.route('/workout-plan-assignments/<int:assignment_id>', methods=['DELETE'])
 @require_auth
 def delete_plan_assignment(assignment_id):
-    assignment = db.session.query(WorkoutPlanDays).filter(WorkoutPlanDays.id == assignment_id).first()
+    assignment = (
+        db.session.query(WorkoutPlanDays, WorkoutPlans.created_by)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanDays.workout_plan_id)
+        .filter(WorkoutPlanDays.id == assignment_id)
+        .first()
+    )
     if assignment is None:
         return jsonify({'error': 'Workout plan assignment not found'}), 404
+    assignment_row, plan_owner_id = assignment
+    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+        return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
-    db.session.delete(assignment)
+    db.session.delete(assignment_row)
     db.session.commit()
     return jsonify({'message': 'Deleted'}), 200
 
@@ -560,11 +609,17 @@ def delete_plan_assignment(assignment_id):
 @workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['PUT'])
 @require_auth
 def update_workout_plan_exercise(workout_plan_exercise_id):
-    pe = db.session.query(WorkoutPlanExercises).filter(
-        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
-    ).first()
-    if pe is None:
+    pe_row = (
+        db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
+        .filter(WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id)
+        .first()
+    )
+    if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
+    pe, plan_owner_id = pe_row
+    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+        return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     body = request.get_json(silent=True) or {}
     if not body:
@@ -583,11 +638,17 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
 @workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_plan_exercise(workout_plan_exercise_id):
-    pe = db.session.query(WorkoutPlanExercises).filter(
-        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
-    ).first()
-    if pe is None:
+    pe_row = (
+        db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
+        .filter(WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id)
+        .first()
+    )
+    if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
+    pe, plan_owner_id = pe_row
+    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+        return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     db.session.delete(pe)
     db.session.commit()
@@ -600,6 +661,9 @@ def delete_workout_plan(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     db.session.delete(plan)
     db.session.commit()
@@ -616,8 +680,8 @@ def create_workout():
     uid = _parse_uuid(body.get('user_id'))
     if uid is None:
         return jsonify({'error': 'user_id must be a valid UUID'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only create workouts for your own account'}), 403
+    if not _can_access_user_id(uid):
+        return jsonify({'error': 'You are not authorized to create workouts for this user'}), 403
 
     title = body.get('title')
     if not title or not str(title).strip():
@@ -672,15 +736,28 @@ def create_workout_from_plan(plan_id):
     )
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
+    access_err = _ensure_plan_access(plan)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
+    requested_uid_raw = body.get('user_id')
+    if requested_uid_raw is not None:
+        requested_uid = _parse_uuid(requested_uid_raw)
+        if requested_uid is None:
+            return jsonify({'error': 'user_id must be a valid UUID'}), 400
+    else:
+        requested_uid = g.user.user_id
+    if not _can_access_user_id(requested_uid):
+        return jsonify({'error': 'You are not authorized to create workouts for this user'}), 403
+
     completion_date_raw = body.get('completion_date')
     parsed_completion_date = _parse_datetime_or_none(completion_date_raw) if completion_date_raw is not None else None
     if completion_date_raw is not None and parsed_completion_date is None:
         return jsonify({'error': 'completion_date must be a valid ISO datetime'}), 400
 
     w = Workouts()
-    w.user_id = g.user.user_id
+    w.user_id = requested_uid
     w.title = plan.title
     w.workout_type_id = plan.workout_type_id
     w.workout_plan_id = plan.workout_plan_id
@@ -727,8 +804,9 @@ def update_workout(workout_id):
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
-    if w.user_id != g.user.user_id:
-        return jsonify({'error': 'You are not authorized to modify this workout'}), 403
+    access_err = _ensure_workout_access(w)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
     if not body:
@@ -762,8 +840,8 @@ def list_user_workouts():
     uid = _parse_uuid(uid_raw)
     if uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
+    if not _can_access_user_id(uid):
+        return jsonify({'error': 'You are not authorized to view workouts for this user'}), 403
 
     rows = (
         db.session.query(
@@ -924,8 +1002,8 @@ def list_user_weekly_assignments():
     uid = _parse_uuid(uid_raw)
     if uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
+    if not _can_access_user_id(uid):
+        return jsonify({'error': 'You are not authorized to view workouts for this user'}), 403
 
     rows = (
         db.session.query(
@@ -978,11 +1056,10 @@ def list_user_weekly_assignments():
 def get_user_schedule():
     uid_raw = request.args.get('user_id')
     target_uid = _parse_uuid(uid_raw)
-    requester_uid = g.user.user_id
     if target_uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if target_uid != requester_uid:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
+    if not _can_access_user_id(target_uid):
+        return jsonify({'error': 'You are not authorized to view workouts for this user'}), 403
     rows = (
         db.session.query(
             WorkoutPlanDays.id,
@@ -1017,9 +1094,17 @@ def get_user_schedule():
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
 @require_auth
 def get_workout(workout_id):
-    w = _get_workout_for_user(workout_id, g.user.user_id)
+    w = (
+        db.session.query(Workouts)
+        .options(joinedload(Workouts.workout_exercises).joinedload(WorkoutExercises.exercise))
+        .filter(Workouts.workout_id == workout_id)
+        .first()
+    )
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
+    access_err = _ensure_workout_access(w)
+    if access_err is not None:
+        return access_err
 
     exercises = sorted(w.workout_exercises, key=lambda x: (x.position, x.workout_exercise_id))
     response = {
@@ -1046,8 +1131,9 @@ def delete_workout(workout_id):
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
-    if w.user_id != g.user.user_id:
-        return jsonify({'error': 'You are not authorized to delete this workout'}), 403
+    access_err = _ensure_workout_access(w)
+    if access_err is not None:
+        return access_err
 
     db.session.delete(w)
     db.session.commit()
@@ -1057,9 +1143,17 @@ def delete_workout(workout_id):
 @workouts_blueprint.route('/workouts/<int:workout_id>/exercises', methods=['GET'])
 @require_auth
 def list_workout_exercises(workout_id):
-    w = _get_workout_for_user(workout_id, g.user.user_id)
+    w = (
+        db.session.query(Workouts)
+        .options(joinedload(Workouts.workout_exercises).joinedload(WorkoutExercises.exercise))
+        .filter(Workouts.workout_id == workout_id)
+        .first()
+    )
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
+    access_err = _ensure_workout_access(w)
+    if access_err is not None:
+        return access_err
 
     exercises = sorted(w.workout_exercises, key=lambda x: (x.position, x.workout_exercise_id))
     return jsonify([_workout_exercise_public(we) for we in exercises]), 200
@@ -1071,8 +1165,9 @@ def add_workout_exercises(workout_id):
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
-    if w.user_id != g.user.user_id:
-        return jsonify({'error': 'You are not authorized to modify this workout'}), 403
+    access_err = _ensure_workout_access(w)
+    if access_err is not None:
+        return access_err
 
     body = request.get_json(silent=True) or {}
     items = body.get('exercises')
@@ -1105,17 +1200,19 @@ def add_workout_exercises(workout_id):
 @workouts_blueprint.route('/workout-exercises/<int:workout_exercise_id>', methods=['PUT'])
 @require_auth
 def update_workout_exercise(workout_exercise_id):
-    we = (
-        db.session.query(WorkoutExercises)
+    row = (
+        db.session.query(WorkoutExercises, Workouts.user_id)
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
         .filter(
             WorkoutExercises.workout_exercise_id == workout_exercise_id,
-            Workouts.user_id == g.user.user_id,
         )
         .first()
     )
-    if we is None:
+    if row is None:
         return jsonify({'error': 'Workout exercise not found'}), 404
+    we, workout_owner_id = row
+    if not _can_access_user_id(workout_owner_id):
+        return jsonify({'error': 'You are not authorized to access this workout'}), 403
 
     body = request.get_json(silent=True) or {}
     if not body:
@@ -1134,17 +1231,19 @@ def update_workout_exercise(workout_exercise_id):
 @workouts_blueprint.route('/workout-exercises/<int:workout_exercise_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_exercise(workout_exercise_id):
-    we = (
-        db.session.query(WorkoutExercises)
+    row = (
+        db.session.query(WorkoutExercises, Workouts.user_id)
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
         .filter(
             WorkoutExercises.workout_exercise_id == workout_exercise_id,
-            Workouts.user_id == g.user.user_id,
         )
         .first()
     )
-    if we is None:
+    if row is None:
         return jsonify({'error': 'Workout exercise not found'}), 404
+    we, workout_owner_id = row
+    if not _can_access_user_id(workout_owner_id):
+        return jsonify({'error': 'You are not authorized to access this workout'}), 403
 
     db.session.delete(we)
     db.session.commit()
