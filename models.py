@@ -124,11 +124,10 @@ class Users(db.Model):
     client_goals = db.relationship('ClientGoals', back_populates='user')
     coach_reviews = db.relationship('CoachReviews', foreign_keys='[CoachReviews.coach_id]', back_populates='coach')
     coach_reviews_left = db.relationship('CoachReviews', foreign_keys='[CoachReviews.left_by_user_id]', back_populates='left_by_user')
-    coach_specializations = db.relationship('CoachSpecializations', back_populates='coach', uselist=False)
     coach_reports = db.relationship('CoachReports', back_populates='coach', uselist=False)
     coach_requests = db.relationship('CoachRequests', foreign_keys='[CoachRequests.coach_id]', back_populates='coach', uselist=False)
     client_requests = db.relationship('CoachRequests', foreign_keys='[CoachRequests.client_id]', back_populates='client', uselist=False)
-    coach_surveys = db.relationship('CoachSurveys', back_populates='user')
+    coach_surveys = db.relationship('CoachSurveys', back_populates='user', order_by='CoachSurveys.coach_survey_id.desc()')
     daily_survey_responses = db.relationship('DailySurveyResponses', back_populates='user')
     meal_plans = db.relationship('MealPlans', back_populates='user')
     messages_message_recipient = db.relationship('Messages', foreign_keys='[Messages.message_recipient]', back_populates='users')
@@ -227,21 +226,6 @@ class CoachReviews(db.Model):
 
     coach = db.relationship('Users', foreign_keys=[coach_id], back_populates='coach_reviews')
     left_by_user = db.relationship('Users', foreign_keys=[left_by_user_id], back_populates='coach_reviews_left')
-
-
-class CoachSpecializations(db.Model):
-    __tablename__ = 'coach_specializations'
-    __table_args__ = (
-        ForeignKeyConstraint(['coach_id'], ['users.user_id'], name='FK_CoachSpecializations_Coach'),
-        PrimaryKeyConstraint('coach_specialization_id', name='PK__coach_sp__0C0F7A7604BF6624')
-    )
-
-    coach_specialization_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
-    coach_id = db.Column(Uuid, nullable=False)
-    exercise = db.Column(Boolean, nullable=False)
-    nutrition = db.Column(Boolean, nullable=False)
-
-    coach = db.relationship('Users', back_populates='coach_specializations')
 
 
 class CoachReports(db.Model):
