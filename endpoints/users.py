@@ -285,10 +285,12 @@ def patch_coach_survey():
 @users_blueprint.route('/<user_id>/profile', methods=['GET'])
 @require_auth
 def get_user_profile(user_id):
-    _, err = _ensure_self_or_coached_client(user_id)
+    target_uid, err = _ensure_self_or_coached_client(user_id)
     if err:
         return err
-    u = g.user
+    u = db.session.query(Users).filter(Users.user_id == target_uid).first()
+    if u is None:
+        return jsonify({'error': 'User not found'}), 404
     payload = {
         'user_id': str(u.user_id),
         'first_name': u.first_name,
