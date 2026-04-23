@@ -351,7 +351,7 @@ def patch_coach_survey():
                     type: integer
     responses:
         200:
-            description: Submit onboarding survey
+            description: Update onboarding survey
             schema:
                 type: object
                 properties:
@@ -445,7 +445,7 @@ def get_user_profile(user_id):
         - Users
     responses:
         200:
-            description: Submit onboarding survey
+            description: Get user profile
             schema:
                 type: object
                 properties:
@@ -573,7 +573,7 @@ def edit_user_account(user_id):
                     type: string
     responses:
         200:
-            description: Submit onboarding survey
+            description: Edit user account
             schema:
                 type: object
                 properties:
