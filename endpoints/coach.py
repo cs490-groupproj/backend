@@ -11,14 +11,18 @@ from app import db
 coach_blueprint = Blueprint('coach_blueprint', __name__)
 
 def _build_coach_json(coach):
+
+    survey = coach[0].coach_surveys[0] if coach[0].coach_surveys else None
+    specialization = survey.specialization if survey else None
+
     return {
         'coach_user_id': coach[0].user_id,
         'first_name': coach[0].first_name,
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'is_exercise_specialization': coach[0].coach_specializations.exercise,
-        'is_nutrition_specialization': coach[0].coach_specializations.nutrition
+        'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
+        'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
 
 def _create_billing_object(json):
@@ -103,7 +107,7 @@ def search():
 
     coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-        .join(CoachSpecializations) \
+        .join(CoachSurveys) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
         .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
