@@ -7,6 +7,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from auth.authentication import require_auth
+from auth.util import can_access_client_endpoint
+
 from models import (
     BodyParts,
     ExerciseCategories,
@@ -22,6 +24,24 @@ from models import (
 
 workouts_blueprint = Blueprint('workouts_blueprint', __name__)
 
+
+
+def _require_self_or_coached_client(target_user_id):
+    if not can_access_client_endpoint(g.user, target_user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 403
+    return None
+
+def _require_authorized_user_id():
+    uid_raw = request.args.get('user_id')
+    uid = _parse_uuid(uid_raw)
+    if uid is None:
+        return None, (jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400)
+
+    auth_err = _require_self_or_coached_client(uid)
+    if auth_err is not None:
+        return None, auth_err
+
+    return uid, None
 
 def _parse_uuid(value):
     try:
@@ -122,14 +142,6 @@ def _serialize_time(val):
     return str(val)
 
 
-def _require_authorized_user_id():
-    uid_raw = request.args.get('user_id')
-    uid = _parse_uuid(uid_raw)
-    if uid is None:
-        return None, (jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400)
-    if uid != g.user.user_id:
-        return None, (jsonify({'error': 'You can only list your own workouts'}), 403)
-    return uid, None
 
 
 def _validated_days_param():
@@ -762,8 +774,10 @@ def list_user_workouts():
     uid = _parse_uuid(uid_raw)
     if uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
+
+    uid, uid_err = _require_authorized_user_id()
+    if uid_err is not None:
+        return uid_err
 
     rows = (
         db.session.query(
@@ -924,9 +938,11 @@ def list_user_weekly_assignments():
     uid = _parse_uuid(uid_raw)
     if uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
 
+    auth_err = _require_self_or_coached_client(uid)
+    if auth_err is not None:
+        return auth_err
+        
     rows = (
         db.session.query(
             Workouts.workout_id,
@@ -981,8 +997,11 @@ def get_user_schedule():
     requester_uid = g.user.user_id
     if target_uid is None:
         return jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400
-    if target_uid != requester_uid:
-        return jsonify({'error': 'You can only list your own workouts'}), 403
+    
+    auth_err = _require_self_or_coached_client(target_uid)
+    if auth_err is not None:
+        return auth_err
+
     rows = (
         db.session.query(
             WorkoutPlanDays.id,
@@ -1014,12 +1033,23 @@ def get_user_schedule():
         }
     ), 200
 
+
+
+    
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
 @require_auth
 def get_workout(workout_id):
-    w = _get_workout_for_user(workout_id, g.user.user_id)
+    w = (
+        db.session.query(Workouts)
+        .options(joinedload(Workouts.workout_exercises).joinedload(WorkoutExercises.exercise))
+        .filter(Workouts.workout_id == workout_id)
+        .first()
+    )
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
+    auth_err = _require_self_or_coached_client(w.user_id)
+    if auth_err is not None:
+        return auth_err
 
     exercises = sorted(w.workout_exercises, key=lambda x: (x.position, x.workout_exercise_id))
     response = {

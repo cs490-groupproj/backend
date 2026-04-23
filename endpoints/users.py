@@ -6,11 +6,22 @@ from models import ClientGoals, CoachSurveys, Users, db
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
 
+from auth.util import can_access_client_endpoint  # add import
+
 users_blueprint = Blueprint('users_blueprint', __name__)
 
 _PRIMARY_GOALS_BINARY_CHARS = {'0', '1'}
 _COACH_QUALIFICATIONS_MAX_LEN = 1000
 
+
+
+def _ensure_self_or_coached_client(user_id_str):
+    uid = _parse_uuid(user_id_str)
+    if uid is None:
+        return None, (jsonify({'error': 'Invalid user id'}), 400)
+    if not can_access_client_endpoint(g.user, uid, g.clients_ids):
+        return None, (jsonify({'error': 'You are not authorized to access this resource'}), 403)
+    return uid, None
 
 def _coerce_bool(value):
     if isinstance(value, bool):
@@ -274,10 +285,9 @@ def patch_coach_survey():
 @users_blueprint.route('/<user_id>/profile', methods=['GET'])
 @require_auth
 def get_user_profile(user_id):
-    _, err = _ensure_self(user_id)
+    _, err = _ensure_self_or_coached_client(user_id)
     if err:
         return err
-
     u = g.user
     payload = {
         'user_id': str(u.user_id),
