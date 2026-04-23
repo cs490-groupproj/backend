@@ -306,7 +306,7 @@ def remove_client():
 def review_coach(coach_id):
     rating = request.json.get('rating')
     try:
-        rating = float(rating)
+        rating = int(rating)
     except (TypeError, ValueError):
         return jsonify({'message': 'Rating must be a number'}), 400
     if rating < 0 or rating > 10:
