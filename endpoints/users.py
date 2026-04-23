@@ -247,6 +247,9 @@ def submit_coach_survey():
                     type: string
                 qualifications:
                     type: string
+                certifications:
+                    type: string
+                    required: false
                 coach_cost:
                     type: integer
     responses:
@@ -293,6 +296,8 @@ def submit_coach_survey():
     if q_err is not None:
         return q_err, 400
 
+    certifications = body.get('certifications')
+
     coach_cost = body.get('coach_cost')
     if coach_cost is not None:
         try:
@@ -306,6 +311,7 @@ def submit_coach_survey():
     row.user_id = g.user.user_id
     row.specialization = specialization
     row.qualifications = qualifications
+    row.certifications = certifications
     row.last_update = _now_naive_utc()
     g.user.is_coach = True
     if coach_cost is not None:
@@ -347,6 +353,9 @@ def patch_coach_survey():
                     type: string
                 qualifications:
                     type: string
+                certifications:
+                    type: string
+                    required: false
                 coach_cost:
                     type: integer
     responses:
@@ -407,6 +416,11 @@ def patch_coach_survey():
             return q_err, 400
         survey.qualifications = qualifications
 
+    if 'certifications' in body:
+        certifications = body.get('certifications')
+        survey.certifications = certifications
+
+
     if 'coach_cost' in body:
         coach_cost = body['coach_cost']
         if coach_cost is None:
@@ -429,6 +443,7 @@ def patch_coach_survey():
         'user_id': str(survey.user_id),
         'specialization': survey.specialization,
         'qualifications': survey.qualifications,
+        'certifications': survey.certifications,
         'coach_cost': g.user.coach_cost,
         'date_created': survey.date_created.isoformat() if survey.date_created else None,
         'last_update': survey.last_update.isoformat() if survey.last_update else None,
