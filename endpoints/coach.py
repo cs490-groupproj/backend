@@ -142,6 +142,29 @@ def search():
 @coach_blueprint.route('/clients')
 @require_auth
 def my_clients():
+    """
+    Get clients for the logged in coach
+    ---
+    tags:
+        - Coaches
+    responses:
+        200:
+            description: Get clients for a logged in coach
+            schema:
+                type: object
+                properties:
+                    clients:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                client_id:
+                                    type: string
+                                first_name:
+                                    type: string
+                                last_name:
+                                    type: string
+    """
     relationships = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
 
     return jsonify({
@@ -155,6 +178,50 @@ def my_clients():
 @coach_blueprint.route('/<coach_id>/request', methods=['POST'])
 @require_auth
 def request_coach(coach_id):
+    """
+    Request a coach
+    ---
+    tags:
+        - Coaches
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            card_number:
+              type: string
+            card_exp_month:
+              type: integer
+            card_exp_year:
+              type: integer
+            card_security_number:
+              type: integer
+            card_name:
+              type: string
+            card_address:
+              type: string
+            card_address_2:
+              type: string
+            card_city:
+              type: string
+            card_postcode:
+              type: string
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
+
+        404:
+            description: Coach does not exist
+    """
     try:
         coach_id = UUID(coach_id)
     except (ValueError, TypeError):
@@ -187,7 +254,44 @@ def request_coach(coach_id):
 @coach_blueprint.route('/<coach_id>/fire', methods=['DELETE'])
 @require_auth
 def fire_coach(coach_id):
+    """
+    Fire coach
+    ---
+    tags:
+        - Coaches
+    responses:
+        200:
+            description: Get coaches based on search query, or all coaches if blank
+            schema:
+                type: object
+                properties:
+                    total_results:
+                        type: integer
+                    coaches:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                coach_user_id:
+                                    type: string
+                                first_name:
+                                    type: string
+                                last_name:
+                                    type: string
+                                coach_cost:
+                                    type: integer
+                                avg_rating:
+                                    type: integer
+                                is_exercise_specialization:
+                                    type: boolean
+                                is_nutrition_specialization:
+                                    type: boolean
+        400:
+            description: Error with parameters
 
+        404:
+            description: Client/Coach relationship does not exist
+    """
     try:
         coach_id = UUID(coach_id)
     except (ValueError, TypeError):
@@ -207,6 +311,50 @@ def fire_coach(coach_id):
 @coach_blueprint.route('/requests')
 @require_auth
 def get_coach_requests():
+    """
+    Get all requests for logged in coach
+    ---
+    tags:
+        - Coaches
+    parameters:
+        - name: limit
+          in: path
+          required: true
+          type: string
+        - name: offset
+          in: path
+          required: true
+          type: integer
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    total_results:
+                        type: integer
+                    requests:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                total_results:
+                                    type: integer
+                                client:
+                                    type: object
+                                    properties:
+                                        client_id:
+                                            type: string
+                                        client_first_name:
+                                            type: string
+                                        client_last_name:
+                                            type: string
+        400:
+            description: Error with parameters
+
+        401:
+            description: User is not a coach
+    """
 
     limit = request.args.get('limit', type=int)
     offset = request.args.get('offset', type=int)
@@ -237,7 +385,22 @@ def get_coach_requests():
 @coach_blueprint.route('/requests/<int:request_id>/accept', methods=['POST'])
 @require_auth
 def accept_coach_request(request_id):
-
+    """
+    Accept coach request
+    ---
+    tags:
+        - Coaches
+    responses:
+        201:
+            description: Accept coach request
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        404:
+            description: Request does not exist
+    """
     coach_request = db.session.query(CoachRequests).filter(CoachRequests.coach_request_id == request_id).first()
     if coach_request is None:
         return jsonify({'message': 'Request does not exist'}), 404
@@ -261,6 +424,22 @@ def accept_coach_request(request_id):
 @coach_blueprint.route('/requests/<int:request_id>/reject', methods=['POST'])
 @require_auth
 def reject_coach_request(request_id):
+    """
+    Reject coach request
+    ---
+    tags:
+        - Coaches
+    responses:
+        201:
+            description: Reject coach request
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        404:
+            description: Request does not exist
+    """
     coach_request = db.session.query(CoachRequests).filter(CoachRequests.coach_request_id == request_id).first()
     if coach_request is None:
         return jsonify({'message': 'Request does not exist'}), 404
@@ -276,7 +455,34 @@ def reject_coach_request(request_id):
 @coach_blueprint.route('/remove_client', methods=['POST'])
 @require_auth
 def remove_client():
+    """
+    Remove client
+    ---
+    tags:
+        - Coaches
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                client_id:
+                    type: string
+    responses:
+        200:
+            description: Remove a client
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
 
+        404:
+            description: Client/Coach relationship does not exist
+    """
     client_id = request.json.get('client_id')
 
     if client_id is None:
@@ -304,6 +510,31 @@ def remove_client():
 @coach_blueprint.route('/<coach_id>/review', methods=['PUT'])
 @require_auth
 def review_coach(coach_id):
+    """
+    Leave a review for a coach
+    ---
+    tags:
+        - Coaches
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                rating:
+                    type: integer
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
+    """
     rating = request.json.get('rating')
     try:
         rating = int(rating)
@@ -341,7 +572,31 @@ def review_coach(coach_id):
 @coach_blueprint.route('/<coach_id>/report', methods=['POST'])
 @require_auth
 def report_coach(coach_id):
-
+    """
+        Report a coach
+        ---
+        tags:
+            - Coaches
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+                type: object
+                properties:
+                    report_body:
+                        type: string
+        responses:
+            201:
+                description: Request a coach
+                schema:
+                    type: object
+                    properties:
+                        message:
+                            type: string
+            400:
+                description: Error with parameters
+        """
     report_body = request.json.get('report_body')
     if not report_body:
         return jsonify({'message': 'Report body parameter must not be null'}), 400
