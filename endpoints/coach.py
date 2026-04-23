@@ -184,7 +184,7 @@ def request_coach(coach_id):
     return jsonify({'message': 'Coach requested'}), 201
 
 
-@coach_blueprint.route('/<coach_id>/fire', methods=['POST'])
+@coach_blueprint.route('/<coach_id>/fire', methods=['DELETE'])
 @require_auth
 def fire_coach(coach_id):
 
@@ -197,8 +197,8 @@ def fire_coach(coach_id):
 
     if relationship is None:
         return jsonify({'message': 'Relationship does not exist'}), 404
-
-    db.session.delete(relationship.client_billing)
+    if (relationship.client_billing):
+        db.session.delete(relationship.client_billing)
     db.session.delete(relationship)
     db.session.commit()
 
@@ -305,29 +305,37 @@ def remove_client():
 @require_auth
 def review_coach(coach_id):
     rating = request.json.get('rating')
-    if rating is None or rating < 0 or rating > 10:
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        return jsonify({'message': 'Rating must be a number'}), 400
+    if rating < 0 or rating > 10:
         return jsonify({'message': 'Rating parameter is invalid'}), 400
+    try:
+        coach_id = UUID(coach_id)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Coach id parameter is invalid'}), 400
+    
+    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(ClientCoaches.client_id == g.user.user_id).first()
 
-    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(ClientCoaches.client_id == g.user.user_id).all()
-
-    if relationship is None:
+    if not relationship:
         return jsonify({'message': 'You cannot review a coach you don\'t have a relationship with'}), 400
 
-    reviews = db.session.query(CoachReviews).filter(CoachReviews.coach_id == coach_id).filter(CoachReviews.left_by_user_id == g.user.user_id).all()
+    reviews = db.session.query(CoachReviews).filter(CoachReviews.coach_id == coach_id).filter(CoachReviews.left_by_user_id == g.user.user_id).first()
 
-    if reviews is None:
+    if not reviews:
         review = CoachReviews()
         review.coach_id = coach_id
         review.left_by_user_id = g.user.user_id
         review.rating = rating
         db.session.add(review)
     else:
-        review = reviews[0]
+        review = reviews
         review.rating = rating
 
     db.session.commit()
 
-    return jsonify({'message': 'Review added or modified'}), 201
+    return jsonify({'message': 'Review added or modified'}), 200
 
 
 @coach_blueprint.route('/<coach_id>/report', methods=['POST'])
@@ -335,7 +343,7 @@ def review_coach(coach_id):
 def report_coach(coach_id):
 
     report_body = request.json.get('report_body')
-    if report_body is None or report_body:
+    if not report_body:
         return jsonify({'message': 'Report body parameter must not be null'}), 400
 
     try:
@@ -344,9 +352,9 @@ def report_coach(coach_id):
         return jsonify({'message': 'Coach id parameter is invalid'}), 400
 
     relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(
-        ClientCoaches.client_id == g.user.user_id).all()
+        ClientCoaches.client_id == g.user.user_id).first()
 
-    if relationship is None:
+    if not relationship:
         return jsonify({'message': 'You cannot report a coach you don\'t have a relationship with'}), 400
 
     report = CoachReports()
