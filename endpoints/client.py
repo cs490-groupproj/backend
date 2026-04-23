@@ -411,6 +411,43 @@ def edit_goals(user_id):
 @client_blueprint.route('/<user_id>/historical_goals')
 @require_auth
 def get_goals(user_id):
+    """
+    Get user goals
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: limit
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get workout plan exercises
+            schema:
+                type: object
+                properties:
+                    user_survey_id:
+                        type: integer
+                    primary_goals_binary:
+                        type: string
+                    weight_goal:
+                        type: integer
+                    exercise_minutes_goal:
+                        type: integer
+                    personal_goals:
+                        type: string
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
