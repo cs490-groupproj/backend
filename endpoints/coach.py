@@ -11,33 +11,24 @@ from app import db
 coach_blueprint = Blueprint('coach_blueprint', __name__)
 
 def _build_coach_json(coach):
+
+    survey = coach[0].coach_surveys[0] if coach[0].coach_surveys else None
+
+    specialization = survey.specialization if survey else None
+    qualifications = survey.qualifications if survey else None
+    certifications = survey.certifications if survey else None
+
     return {
         'coach_user_id': coach[0].user_id,
         'first_name': coach[0].first_name,
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'is_exercise_specialization': coach[0].coach_specializations.exercise,
-        'is_nutrition_specialization': coach[0].coach_specializations.nutrition
+        'certifications': certifications,
+        'qualifications': qualifications,
+        'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
+        'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
-
-def _create_billing_object(json):
-    try:
-        billing = ClientBilling()
-        billing.card_number = json['card_number']
-        billing.card_exp_month = json['card_exp_month']
-        billing.card_exp_year = json['card_exp_year']
-        billing.card_security_number = json['card_security_number']
-        billing.card_name = json['card_name']
-        billing.card_address_1 = json['card_address']
-        billing.card_address_2 = json['card_address_2'] or None
-        billing.card_city = json['card_city']
-        billing.card_postcode = json['card_postcode']
-        billing.renew_day_number = datetime.now().day
-    except (KeyError, TypeError, ValueError):
-        return None
-
-    return billing
 
 @coach_blueprint.route('/search')
 @require_auth
@@ -83,6 +74,10 @@ def search():
                                     type: integer
                                 avg_rating:
                                     type: integer
+                                certifications:
+                                    type: string
+                                qualifications:
+                                    type: string
                                 is_exercise_specialization:
                                     type: boolean
                                 is_nutrition_specialization:
@@ -103,7 +98,7 @@ def search():
 
     coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-        .join(CoachSpecializations) \
+        .join(CoachSurveys) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
         .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
@@ -142,6 +137,29 @@ def search():
 @coach_blueprint.route('/clients')
 @require_auth
 def my_clients():
+    """
+    Get clients for the logged in coach
+    ---
+    tags:
+        - Coaches
+    responses:
+        200:
+            description: Get clients for a logged in coach
+            schema:
+                type: object
+                properties:
+                    clients:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                client_id:
+                                    type: string
+                                first_name:
+                                    type: string
+                                last_name:
+                                    type: string
+    """
     relationships = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
 
     return jsonify({
@@ -155,6 +173,25 @@ def my_clients():
 @coach_blueprint.route('/<coach_id>/request', methods=['POST'])
 @require_auth
 def request_coach(coach_id):
+    """
+    Request a coach
+    ---
+    tags:
+        - Coaches
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
+
+        404:
+            description: Coach does not exist
+    """
     try:
         coach_id = UUID(coach_id)
     except (ValueError, TypeError):
@@ -164,19 +201,14 @@ def request_coach(coach_id):
     if coach is None:
         return jsonify({'message': 'coach does not exist'}), 404
 
-    data = request.json
-    billing = _create_billing_object(data)
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
 
-    if billing is None:
-        return jsonify({'message': 'billing is invalid not exist'}), 400
-
-    db.session.add(billing)
-    db.session.flush()
+    if client_billing is None:
+        return jsonify({'message': 'client billing does not exist'}), 404
 
     coach_request = CoachRequests()
     coach_request.coach_id = coach_id
     coach_request.client_id = g.user.user_id
-    coach_request.client_billing_id = billing.client_billing_id
 
     db.session.add(coach_request)
     db.session.commit()
@@ -184,10 +216,51 @@ def request_coach(coach_id):
     return jsonify({'message': 'Coach requested'}), 201
 
 
-@coach_blueprint.route('/<coach_id>/fire', methods=['POST'])
+@coach_blueprint.route('/<coach_id>/fire', methods=['DELETE'])
 @require_auth
 def fire_coach(coach_id):
+    """
+    Fire coach
+    ---
+    tags:
+        - Coaches
+    responses:
+        200:
+            description: Get coaches based on search query, or all coaches if blank
+            schema:
+                type: object
+                properties:
+                    total_results:
+                        type: integer
+                    coaches:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                coach_user_id:
+                                    type: string
+                                first_name:
+                                    type: string
+                                last_name:
+                                    type: string
+                                coach_cost:
+                                    type: integer
+                                avg_rating:
+                                    type: integer
+                                certifications:
+                                    type: string
+                                qualifications:
+                                    type: string
+                                is_exercise_specialization:
+                                    type: boolean
+                                is_nutrition_specialization:
+                                    type: boolean
+        400:
+            description: Error with parameters
 
+        404:
+            description: Client/Coach relationship does not exist
+    """
     try:
         coach_id = UUID(coach_id)
     except (ValueError, TypeError):
@@ -197,8 +270,8 @@ def fire_coach(coach_id):
 
     if relationship is None:
         return jsonify({'message': 'Relationship does not exist'}), 404
-
-    db.session.delete(relationship.client_billing)
+    if relationship.client_billing:
+        db.session.delete(relationship.client_billing)
     db.session.delete(relationship)
     db.session.commit()
 
@@ -207,6 +280,50 @@ def fire_coach(coach_id):
 @coach_blueprint.route('/requests')
 @require_auth
 def get_coach_requests():
+    """
+    Get all requests for logged in coach
+    ---
+    tags:
+        - Coaches
+    parameters:
+        - name: limit
+          in: path
+          required: true
+          type: string
+        - name: offset
+          in: path
+          required: true
+          type: integer
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    total_results:
+                        type: integer
+                    requests:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                total_results:
+                                    type: integer
+                                client:
+                                    type: object
+                                    properties:
+                                        client_id:
+                                            type: string
+                                        client_first_name:
+                                            type: string
+                                        client_last_name:
+                                            type: string
+        400:
+            description: Error with parameters
+
+        401:
+            description: User is not a coach
+    """
 
     limit = request.args.get('limit', type=int)
     offset = request.args.get('offset', type=int)
@@ -237,7 +354,22 @@ def get_coach_requests():
 @coach_blueprint.route('/requests/<int:request_id>/accept', methods=['POST'])
 @require_auth
 def accept_coach_request(request_id):
-
+    """
+    Accept coach request
+    ---
+    tags:
+        - Coaches
+    responses:
+        201:
+            description: Accept coach request
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        404:
+            description: Request does not exist
+    """
     coach_request = db.session.query(CoachRequests).filter(CoachRequests.coach_request_id == request_id).first()
     if coach_request is None:
         return jsonify({'message': 'Request does not exist'}), 404
@@ -245,11 +377,15 @@ def accept_coach_request(request_id):
     if coach_request.coach_id != g.user.user_id:
         return jsonify({'message': 'You are not authorized to modify this content'}), 401
 
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == coach_request.client_id).first()
+    if client_billing is None:
+        return jsonify({'message': 'Client billing does not exist'}), 404
+
 
     relationship = ClientCoaches()
     relationship.coach_id = coach_request.coach_id
     relationship.client_id = coach_request.client_id
-    relationship.client_billing_id = coach_request.client_billing_id
+    relationship.client_billing_id = client_billing.client_billing_id
     relationship.paired_date = datetime.now()
 
     db.session.add(relationship)
@@ -261,6 +397,22 @@ def accept_coach_request(request_id):
 @coach_blueprint.route('/requests/<int:request_id>/reject', methods=['POST'])
 @require_auth
 def reject_coach_request(request_id):
+    """
+    Reject coach request
+    ---
+    tags:
+        - Coaches
+    responses:
+        201:
+            description: Reject coach request
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        404:
+            description: Request does not exist
+    """
     coach_request = db.session.query(CoachRequests).filter(CoachRequests.coach_request_id == request_id).first()
     if coach_request is None:
         return jsonify({'message': 'Request does not exist'}), 404
@@ -276,7 +428,34 @@ def reject_coach_request(request_id):
 @coach_blueprint.route('/remove_client', methods=['POST'])
 @require_auth
 def remove_client():
+    """
+    Remove client
+    ---
+    tags:
+        - Coaches
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                client_id:
+                    type: string
+    responses:
+        200:
+            description: Remove a client
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
 
+        404:
+            description: Client/Coach relationship does not exist
+    """
     client_id = request.json.get('client_id')
 
     if client_id is None:
@@ -304,38 +483,95 @@ def remove_client():
 @coach_blueprint.route('/<coach_id>/review', methods=['PUT'])
 @require_auth
 def review_coach(coach_id):
+    """
+    Leave a review for a coach
+    ---
+    tags:
+        - Coaches
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                rating:
+                    type: integer
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Error with parameters
+    """
     rating = request.json.get('rating')
-    if rating is None or rating < 0 or rating > 10:
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        return jsonify({'message': 'Rating must be a number'}), 400
+    if rating < 0 or rating > 10:
         return jsonify({'message': 'Rating parameter is invalid'}), 400
+    try:
+        coach_id = UUID(coach_id)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Coach id parameter is invalid'}), 400
+    
+    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(ClientCoaches.client_id == g.user.user_id).first()
 
-    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(ClientCoaches.client_id == g.user.user_id).all()
-
-    if relationship is None:
+    if not relationship:
         return jsonify({'message': 'You cannot review a coach you don\'t have a relationship with'}), 400
 
-    reviews = db.session.query(CoachReviews).filter(CoachReviews.coach_id == coach_id).filter(CoachReviews.left_by_user_id == g.user.user_id).all()
+    reviews = db.session.query(CoachReviews).filter(CoachReviews.coach_id == coach_id).filter(CoachReviews.left_by_user_id == g.user.user_id).first()
 
-    if reviews is None:
+    if not reviews:
         review = CoachReviews()
         review.coach_id = coach_id
         review.left_by_user_id = g.user.user_id
         review.rating = rating
         db.session.add(review)
     else:
-        review = reviews[0]
+        review = reviews
         review.rating = rating
 
     db.session.commit()
 
-    return jsonify({'message': 'Review added or modified'}), 201
+    return jsonify({'message': 'Review added or modified'}), 200
 
 
 @coach_blueprint.route('/<coach_id>/report', methods=['POST'])
 @require_auth
 def report_coach(coach_id):
-
+    """
+        Report a coach
+        ---
+        tags:
+            - Coaches
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+                type: object
+                properties:
+                    report_body:
+                        type: string
+        responses:
+            201:
+                description: Request a coach
+                schema:
+                    type: object
+                    properties:
+                        message:
+                            type: string
+            400:
+                description: Error with parameters
+        """
     report_body = request.json.get('report_body')
-    if report_body is None or report_body:
+    if not report_body:
         return jsonify({'message': 'Report body parameter must not be null'}), 400
 
     try:
@@ -344,9 +580,9 @@ def report_coach(coach_id):
         return jsonify({'message': 'Coach id parameter is invalid'}), 400
 
     relationship = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == coach_id).filter(
-        ClientCoaches.client_id == g.user.user_id).all()
+        ClientCoaches.client_id == g.user.user_id).first()
 
-    if relationship is None:
+    if not relationship:
         return jsonify({'message': 'You cannot report a coach you don\'t have a relationship with'}), 400
 
     report = CoachReports()
