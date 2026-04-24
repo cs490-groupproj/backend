@@ -316,7 +316,7 @@ def submit_coach_survey():
     row.qualifications = qualifications
     row.certifications = certifications
     row.last_update = _now_naive_utc()
-    g.user.is_coach = True
+    row.is_client = True
     if coach_cost is not None:
         g.user.coach_cost = coach_cost
 
