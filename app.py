@@ -24,6 +24,7 @@ from endpoints.users import users_blueprint
 from endpoints.workouts import workouts_blueprint
 from endpoints.payments import payments_blueprint
 from endpoints.admin import admin_blueprint
+from endpoints.progress import progress_blueprint
 
 
 socketio = SocketIO(cors_allowed_origins="*")
@@ -64,6 +65,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(coach_blueprint, url_prefix='/coaches')
     app.register_blueprint(payments_blueprint, url_prefix='/payments')
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
+    app.register_blueprint(progress_blueprint, url_prefix='/progress')
 
     init_firebase()
 
