@@ -8,14 +8,23 @@ from flask import Blueprint, jsonify, request, g
 from sqlalchemy import func
 
 def _build_coach_json(coach):
+
+    survey = coach[0].coach_surveys[0] if coach[0].coach_surveys else None
+
+    specialization = survey.specialization if survey else None
+    qualifications = survey.qualifications if survey else None
+    certifications = survey.certifications if survey else None
+
     return {
         'coach_user_id': coach[0].user_id,
         'first_name': coach[0].first_name,
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'is_exercise_specialization': coach[0].coach_specializations.exercise,
-        'is_nutrition_specialization': coach[0].coach_specializations.nutrition
+        'certifications': certifications,
+        'qualifications': qualifications,
+        'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
+        'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
 
 client_blueprint = Blueprint('client_blueprint', __name__)
@@ -115,7 +124,7 @@ def coaches(user_id):
     coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
         .join(ClientCoaches, ClientCoaches.coach_id == Users.user_id) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-        .join(CoachSpecializations) \
+        .join(CoachSurveys) \
         .filter(ClientCoaches.client_id == user_id) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
