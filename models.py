@@ -117,6 +117,7 @@ class Users(db.Model):
     email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     is_coach = db.Column(Boolean, nullable=False)
     is_client = db.Column(Boolean, nullable=False, server_default=text('((1))'))
+    is_admin = db.Column(Boolean, nullable=False, server_default=text('((0))'))
     is_active = db.Column(Boolean, nullable=False)
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     coach_cost = db.Column(Integer)
