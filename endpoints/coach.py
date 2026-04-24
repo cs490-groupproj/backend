@@ -459,7 +459,7 @@ def remove_client():
         return jsonify({'message': 'User does not coach client'}), 400
 
     relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).all()
-    if relationship is None:
+    if relationship is None or not relationship:
         return jsonify({'message': 'Relationship does not exist'}), 404
 
     db.session.delete(relationship.client_billing)
