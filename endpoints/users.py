@@ -220,11 +220,14 @@ def get_me():
                         type: boolean
                     is_client:
                         type: boolean
+                    is_admin:
+                        type: boolean
     """
     return jsonify({
         'user_id': str(g.user.user_id),
         'is_coach': g.user.is_coach,
         'is_client': g.user.is_client,
+        'is_admin': g.user.is_admin,
     }), 200
 
 
@@ -313,7 +316,7 @@ def submit_coach_survey():
     row.qualifications = qualifications
     row.certifications = certifications
     row.last_update = _now_naive_utc()
-    g.user.is_coach = True
+    row.is_client = True
     if coach_cost is not None:
         g.user.coach_cost = coach_cost
 
@@ -476,6 +479,8 @@ def get_user_profile(user_id):
                         type: string
                     is_client:
                         type: string
+                    is_admin:
+                        type: string
                     coach_cost:
                         type: integer
                     is_active:
@@ -531,6 +536,7 @@ def get_user_profile(user_id):
         'email': u.email,
         'is_coach': u.is_coach,
         'is_client': u.is_client,
+        'is_admin': u.is_admin,
         'coach_cost': u.coach_cost,
         'is_active': u.is_active,
         'date_created': u.date_created.isoformat() if u.date_created else None,

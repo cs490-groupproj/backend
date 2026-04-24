@@ -23,6 +23,8 @@ from endpoints.usda_proxy import usda_proxy_blueprint
 from endpoints.users import users_blueprint
 from endpoints.workouts import workouts_blueprint
 from endpoints.payments import payments_blueprint
+from endpoints.admin import admin_blueprint
+
 
 socketio = SocketIO(cors_allowed_origins="*")
 import message_sockets # DO NOT REMOVE THIS. It appears unused, but needs to be here for the sockets to register
@@ -61,6 +63,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(message_blueprint, url_prefix='/messages')
     app.register_blueprint(coach_blueprint, url_prefix='/coaches')
     app.register_blueprint(payments_blueprint, url_prefix='/payments')
+    app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
     init_firebase()
 
