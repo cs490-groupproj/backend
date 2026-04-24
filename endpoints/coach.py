@@ -21,6 +21,8 @@ def _build_coach_json(coach):
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
+        'certifications': coach[0].certifications,
+        'qualifications': coach[0].qualifications,
         'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
         'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
