@@ -21,9 +21,11 @@ class ClientBilling(db.Model):
     __tablename__ = 'client_billing'
     __table_args__ = (
         PrimaryKeyConstraint('client_billing_id', name='PK__client_b__934B3E00115BA8B3'),
+        ForeignKeyConstraint(['client_id'], name='FK_ClientBilling_ClientId', refcolumns=['users.user_id']),
     )
 
     client_billing_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    client_id = db.Column(Uuid, nullable=False)
     card_number = db.Column(String(16, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     card_exp_month = db.Column(Integer, nullable=False)
     card_exp_year = db.Column(Integer, nullable=False)
@@ -35,8 +37,8 @@ class ClientBilling(db.Model):
     renew_day_number = db.Column(Integer, nullable=False)
     card_address_2 = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'))
 
+    client = db.relationship('Users', back_populates='client_billing')
     client_coaches = db.relationship('ClientCoaches', back_populates='client_billing')
-    coach_requests = db.relationship('CoachRequests', back_populates='client_billing')
 
 
 class ExerciseCategories(db.Model):
@@ -121,6 +123,7 @@ class Users(db.Model):
 
     client_coaches_client = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.client_id]', back_populates='client')
     client_coaches_coach = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.coach_id]', back_populates='coach')
+    client_billing = db.relationship('ClientBilling', foreign_keys='[ClientBilling.client_id]', back_populates='client')
     client_goals = db.relationship('ClientGoals', back_populates='user')
     coach_reviews = db.relationship('CoachReviews', foreign_keys='[CoachReviews.coach_id]', back_populates='coach')
     coach_reviews_left = db.relationship('CoachReviews', foreign_keys='[CoachReviews.left_by_user_id]', back_populates='left_by_user')
@@ -247,18 +250,15 @@ class CoachRequests(db.Model):
     __table_args__ = (
         ForeignKeyConstraint(['client_id'], ['users.user_id'], name='FK_CoachRequests_Client'),
         ForeignKeyConstraint(['coach_id'], ['users.user_id'], name='FK_CoachRequests_Coach'),
-        ForeignKeyConstraint(['client_billing_id'], ['client_billing.client_billing_id'], name='FK_CoachRequests_ClientBilling'),
         PrimaryKeyConstraint('coach_request_id', name='PK__coach_re__B29DBB8909159964')
     )
 
     coach_request_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     client_id = db.Column(Uuid, nullable=False)
     coach_id = db.Column(Uuid, nullable=False)
-    client_billing_id = db.Column(Integer, nullable=False)
 
     client = db.relationship('Users', foreign_keys=[client_id], back_populates='client_requests')
     coach = db.relationship('Users', foreign_keys=[coach_id], back_populates='coach_requests')
-    client_billing = db.relationship('ClientBilling', back_populates='coach_requests')
 
 
 

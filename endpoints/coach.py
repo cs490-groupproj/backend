@@ -27,24 +27,6 @@ def _build_coach_json(coach):
         'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
 
-def _create_billing_object(json):
-    try:
-        billing = ClientBilling()
-        billing.card_number = json['card_number']
-        billing.card_exp_month = json['card_exp_month']
-        billing.card_exp_year = json['card_exp_year']
-        billing.card_security_number = json['card_security_number']
-        billing.card_name = json['card_name']
-        billing.card_address_1 = json['card_address']
-        billing.card_address_2 = json['card_address_2'] or None
-        billing.card_city = json['card_city']
-        billing.card_postcode = json['card_postcode']
-        billing.renew_day_number = datetime.now().day
-    except (KeyError, TypeError, ValueError):
-        return None
-
-    return billing
-
 @coach_blueprint.route('/search')
 @require_auth
 def search():
@@ -189,31 +171,6 @@ def request_coach(coach_id):
     ---
     tags:
         - Coaches
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            card_number:
-              type: string
-            card_exp_month:
-              type: integer
-            card_exp_year:
-              type: integer
-            card_security_number:
-              type: integer
-            card_name:
-              type: string
-            card_address:
-              type: string
-            card_address_2:
-              type: string
-            card_city:
-              type: string
-            card_postcode:
-              type: string
     responses:
         201:
             description: Request a coach
@@ -237,19 +194,14 @@ def request_coach(coach_id):
     if coach is None:
         return jsonify({'message': 'coach does not exist'}), 404
 
-    data = request.json
-    billing = _create_billing_object(data)
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
 
-    if billing is None:
-        return jsonify({'message': 'billing is invalid not exist'}), 400
-
-    db.session.add(billing)
-    db.session.flush()
+    if client_billing is None:
+        return jsonify({'message': 'client billing does not exist'}), 404
 
     coach_request = CoachRequests()
     coach_request.coach_id = coach_id
     coach_request.client_id = g.user.user_id
-    coach_request.client_billing_id = billing.client_billing_id
 
     db.session.add(coach_request)
     db.session.commit()
@@ -307,7 +259,7 @@ def fire_coach(coach_id):
 
     if relationship is None:
         return jsonify({'message': 'Relationship does not exist'}), 404
-    if (relationship.client_billing):
+    if relationship.client_billing:
         db.session.delete(relationship.client_billing)
     db.session.delete(relationship)
     db.session.commit()
@@ -414,11 +366,15 @@ def accept_coach_request(request_id):
     if coach_request.coach_id != g.user.user_id:
         return jsonify({'message': 'You are not authorized to modify this content'}), 401
 
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == coach_request.client_id).first()
+    if client_billing is None:
+        return jsonify({'message': 'Client billing does not exist'}), 404
+
 
     relationship = ClientCoaches()
     relationship.coach_id = coach_request.coach_id
     relationship.client_id = coach_request.client_id
-    relationship.client_billing_id = coach_request.client_billing_id
+    relationship.client_billing_id = client_billing.client_billing_id
     relationship.paired_date = datetime.now()
 
     db.session.add(relationship)
