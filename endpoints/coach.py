@@ -204,6 +204,10 @@ def request_coach(coach_id):
     if coach is None:
         return jsonify({'message': 'coach does not exist'}), 404
 
+    request_check = db.session.query(CoachRequests).filter(CoachRequests.coach_id == coach_id).filter(CoachRequests.client_id == g.user.user_id).first()
+    if request_check is not None:
+        return jsonify({'message': 'Request already exists'}), 400
+
     client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
 
     if client_billing is None:
