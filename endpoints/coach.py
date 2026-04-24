@@ -148,6 +148,8 @@ def my_clients():
             schema:
                 type: object
                 properties:
+                    total_results:
+                        type: integer
                     clients:
                         type: array
                         items:
@@ -163,6 +165,7 @@ def my_clients():
     relationships = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
 
     return jsonify({
+        'total_results': len(relationships),
         'clients': [{
             'client_id': r.client.user_id,
             'first_name': r.client.first_name,
