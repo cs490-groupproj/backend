@@ -16,7 +16,6 @@ def _build_coach_json(coach):
 
     specialization = survey.specialization if survey else None
     qualifications = survey.qualifications if survey else None
-    certifications = survey.certifications if survey else None
 
     return {
         'coach_user_id': coach[0].user_id,
@@ -24,7 +23,6 @@ def _build_coach_json(coach):
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'certifications': certifications,
         'qualifications': qualifications,
         'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
         'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
@@ -74,8 +72,6 @@ def search():
                                     type: integer
                                 avg_rating:
                                     type: integer
-                                certifications:
-                                    type: string
                                 qualifications:
                                     type: string
                                 is_exercise_specialization:
@@ -250,8 +246,6 @@ def fire_coach(coach_id):
                                     type: integer
                                 avg_rating:
                                     type: integer
-                                certifications:
-                                    type: string
                                 qualifications:
                                     type: string
                                 is_exercise_specialization:
@@ -502,7 +496,7 @@ def review_coach(coach_id):
                     type: integer
     responses:
         201:
-            description: Request a coach
+            description: Review a coach
             schema:
                 type: object
                 properties:
@@ -564,7 +558,7 @@ def report_coach(coach_id):
                         type: string
         responses:
             201:
-                description: Request a coach
+                description: Report a coach
                 schema:
                     type: object
                     properties:

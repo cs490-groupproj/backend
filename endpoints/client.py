@@ -13,7 +13,6 @@ def _build_coach_json(coach):
 
     specialization = survey.specialization if survey else None
     qualifications = survey.qualifications if survey else None
-    certifications = survey.certifications if survey else None
 
     return {
         'coach_user_id': coach[0].user_id,
@@ -21,7 +20,6 @@ def _build_coach_json(coach):
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'certifications': certifications,
         'qualifications': qualifications,
         'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
         'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
