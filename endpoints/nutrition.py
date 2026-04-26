@@ -518,7 +518,7 @@ def today():
     if timezone_string is None:
         return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
 
-    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 1)
+    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 0)
 
     if tz_start is None or tz_end is None:
         return jsonify({'error': 'timezone_string parameter is not valid'}), 400
@@ -551,6 +551,55 @@ def today():
 @nutrition_blueprint.route('/week')
 @require_auth
 def week():
+    """
+    Meal logs by week
+    ---
+    tags:
+        - Nutrition
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                timezone:
+                    type: string
+                user_id:
+                    type: string
+    responses:
+        201:
+            description: Request a coach
+            schema:
+                type: object
+                properties:
+                    meal_plans:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                meal_plan_id:
+                                    type: integer
+                                meal_type:
+                                    type: integer
+                                meal_logged_at:
+                                    type: string
+                                meal_plan_foods:
+                                    type: array
+                                    items:
+                                        type: object
+                                        properties:
+                                            fdc_id:
+                                                type: integer
+                                            food_name:
+                                                type: string
+                                            calories:
+                                                type: integer
+                                            portion_size:
+                                                type: integer
+        400:
+            description: Error with parameters
+    """
     timezone_string = request.args.get('timezone')
     user_id = request.args.get('user_id')
 

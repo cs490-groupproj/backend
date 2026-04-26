@@ -10,14 +10,23 @@ from sqlalchemy import func
 from auth.util import can_access_client_endpoint 
 
 def _build_coach_json(coach):
+
+    survey = coach[0].coach_surveys[0] if coach[0].coach_surveys else None
+
+    specialization = survey.specialization if survey else None
+    qualifications = survey.qualifications if survey else None
+    certifications = survey.certifications if survey else None
+
     return {
         'coach_user_id': coach[0].user_id,
         'first_name': coach[0].first_name,
         'last_name': coach[0].last_name,
         'coach_cost': coach[0].coach_cost,
         'avg_rating': coach[1],
-        'is_exercise_specialization': coach[0].coach_specializations.exercise,
-        'is_nutrition_specialization': coach[0].coach_specializations.nutrition
+        'certifications': certifications,
+        'qualifications': qualifications,
+        'is_exercise_specialization': specialization in ('EXERCISE', 'BOTH'),
+        'is_nutrition_specialization': specialization in ('NUTRITION', 'BOTH'),
     }
 
 client_blueprint = Blueprint('client_blueprint', __name__)
@@ -117,7 +126,7 @@ def coaches(user_id):
     coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
         .join(ClientCoaches, ClientCoaches.coach_id == Users.user_id) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
-        .join(CoachSpecializations) \
+        .join(CoachSurveys) \
         .filter(ClientCoaches.client_id == user_id) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
@@ -410,6 +419,43 @@ def edit_goals(user_id):
 @client_blueprint.route('/<user_id>/historical_goals')
 @require_auth
 def get_goals(user_id):
+    """
+    Get user goals
+    ---
+    tags:
+        - Clients
+    parameters:
+        - name: limit
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get workout plan exercises
+            schema:
+                type: object
+                properties:
+                    user_survey_id:
+                        type: integer
+                    primary_goals_binary:
+                        type: string
+                    weight_goal:
+                        type: integer
+                    exercise_minutes_goal:
+                        type: integer
+                    personal_goals:
+                        type: string
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     role_err = _require_client_role()
     if role_err is not None:
         return role_err
