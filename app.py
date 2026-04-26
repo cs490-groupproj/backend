@@ -56,6 +56,7 @@ def create_app(config_overrides=None):
     db.init_app(app)
     socketio.init_app(app, async_mode="gevent")
 
+<<<<<<< Updated upstream
     app.register_blueprint(client_blueprint, url_prefix='/clients')
     app.register_blueprint(nutrition_blueprint, url_prefix='/nutrition')
     app.register_blueprint(usda_proxy_blueprint, url_prefix='/proxy/usda')
@@ -66,6 +67,83 @@ def create_app(config_overrides=None):
     app.register_blueprint(payments_blueprint, url_prefix='/payments')
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
     app.register_blueprint(progress_blueprint, url_prefix='/progress')
+=======
+@app.route('/users/me', methods=['GET'])
+@require_auth
+def get_current_user():
+    user = g.user
+    return jsonify({
+        'user_id': str(user.user_id),
+        'firebase_user_id': user.firebase_user_id,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': g.firebase_user.get('email'),
+    }), 200
+
+@app.route('/users/register', methods=['POST'])
+@require_auth
+def register_user():
+    # This endpoint allows registering a user that has authenticated with Firebase
+    # but doesn't have a record in the users table yet
+    body = request.get_json(silent=True) or {}
+    
+    firebase_user = g.firebase_user
+    firebase_user_id = firebase_user.get('user_id')
+    email = firebase_user.get('email')
+    
+    # Check if user already exists
+    existing_user = db.session.query(Users).filter(Users.firebase_user_id == firebase_user_id).first()
+    if existing_user:
+        # Update existing user if fields are missing
+        updated = False
+        if not existing_user.email and email:
+            existing_user.email = email
+            updated = True
+        if existing_user.is_coach is None:
+            existing_user.is_coach = body.get('is_coach', False)
+            updated = True
+        if existing_user.is_active is None:
+            existing_user.is_active = True
+            updated = True
+        if not existing_user.first_name:
+            existing_user.first_name = body.get('first_name', '')
+            updated = True
+        if not existing_user.last_name:
+            existing_user.last_name = body.get('last_name', '')
+            updated = True
+        
+        if updated:
+            db.session.commit()
+        
+        return jsonify({
+            'user_id': str(existing_user.user_id),
+            'firebase_user_id': existing_user.firebase_user_id,
+            'first_name': existing_user.first_name,
+            'last_name': existing_user.last_name,
+            'email': existing_user.email,
+            'updated': updated,
+        }), 200
+    else:
+        # Create new user
+        new_user = Users()
+        new_user.firebase_user_id = firebase_user_id
+        new_user.first_name = body.get('first_name', '')
+        new_user.last_name = body.get('last_name', '')
+        new_user.email = email or ''
+        new_user.is_coach = body.get('is_coach', False)
+        new_user.is_active = True
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        return jsonify({
+            'user_id': str(new_user.user_id),
+            'firebase_user_id': new_user.firebase_user_id,
+            'first_name': new_user.first_name,
+            'last_name': new_user.last_name,
+            'email': new_user.email,
+        }), 201
+>>>>>>> Stashed changes
 
     init_firebase()
 

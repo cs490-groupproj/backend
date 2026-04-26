@@ -39,6 +39,10 @@ def require_auth(f):
             if g.user is None:
                 return jsonify({'error': 'This user has an account, but has not yet registered.', 'hint': 'If you are a frontend developer, call POST /users/register.'}), 400
 
+            # Check if user_id is set
+            if g.user.user_id is None:
+                return jsonify({'error': 'User account is incomplete. Please contact support.'}), 500
+
             # Gets the clients that the authenticated user coaches
             g.clients = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
             g.clients_ids = [c.client_id for c in g.clients]

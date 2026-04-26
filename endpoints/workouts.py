@@ -5,6 +5,7 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import SQLAlchemyError
 
 from auth.authentication import require_auth
 from models import (
@@ -448,6 +449,7 @@ def get_exercise(exercise_id):
 @workouts_blueprint.route('/workout-plans', methods=['GET'])
 @require_auth
 def list_workout_plans():
+<<<<<<< Updated upstream
     """
     List workout plans
     ---
@@ -499,6 +501,14 @@ def list_workout_plans():
         }
         for r in rows
     ]), 200
+=======
+    rows = db.session.query(WorkoutPlans).order_by(WorkoutPlans.title).all()
+    return jsonify([{
+        'workout_plan_id': r.workout_plan_id,
+        'title': r.title,
+        'created_by': str(r.created_by) if r.created_by else None,
+    } for r in rows]), 200
+>>>>>>> Stashed changes
 
 
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['GET'])
@@ -813,6 +823,7 @@ def add_plan_exercises(plan_id):
     return jsonify({'message': 'Added'}), 201
 
 
+<<<<<<< Updated upstream
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['POST'])
 @require_auth
 def add_plan_assignments(plan_id):
@@ -1029,6 +1040,11 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
             description: Workout plan exercise not found
 
     """
+=======
+@workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['PUT'])
+@require_auth
+def update_plan_exercise(workout_plan_exercise_id):
+>>>>>>> Stashed changes
     pe = db.session.query(WorkoutPlanExercises).filter(
         WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
     ).first()
@@ -1051,6 +1067,7 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
 
 @workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['DELETE'])
 @require_auth
+<<<<<<< Updated upstream
 def delete_workout_plan_exercise(workout_plan_exercise_id):
     """
     Delete workout plan exercise
@@ -1070,6 +1087,9 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
             description: Workout plan exercise not found
 
     """
+=======
+def delete_plan_exercise(workout_plan_exercise_id):
+>>>>>>> Stashed changes
     pe = db.session.query(WorkoutPlanExercises).filter(
         WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
     ).first()
@@ -1081,6 +1101,7 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
     return jsonify({'message': 'Deleted'}), 200
 
 
+<<<<<<< Updated upstream
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_plan(plan_id):
@@ -1111,6 +1132,8 @@ def delete_workout_plan(plan_id):
     return jsonify({'message': 'Workout plan deleted'}), 200
 
 
+=======
+>>>>>>> Stashed changes
 # --- Workout sessions ---
 
 
@@ -1178,11 +1201,17 @@ def create_workout():
 
     """
     body = request.get_json(silent=True) or {}
-    uid = _parse_uuid(body.get('user_id'))
-    if uid is None:
-        return jsonify({'error': 'user_id must be a valid UUID'}), 400
-    if uid != g.user.user_id:
-        return jsonify({'error': 'You can only create workouts for your own account'}), 403
+    user_id_raw = body.get('user_id')
+    if user_id_raw is None:
+        uid = g.user.user_id
+        if uid is None:
+            return jsonify({'error': 'User ID is not set. Please contact support.'}), 500
+    else:
+        uid = _parse_uuid(user_id_raw)
+        if uid is None:
+            return jsonify({'error': 'user_id must be a valid UUID'}), 400
+        if uid != g.user.user_id:
+            return jsonify({'error': 'You can only create workouts for your own account'}), 403
 
     title = body.get('title')
     if not title or not str(title).strip():
@@ -1981,6 +2010,49 @@ def get_workout(workout_id):
     return jsonify(response), 200
 
 
+@workouts_blueprint.route('/workouts/<int:workout_id>', methods=['PUT'])
+@require_auth
+def update_workout(workout_id):
+    w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
+    if w is None:
+        return jsonify({'error': 'Workout not found'}), 404
+    if w.user_id != g.user.user_id:
+        return jsonify({'error': 'You are not authorized to modify this workout'}), 403
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    if 'title' in body:
+        title = body.get('title')
+        if title is None or not str(title).strip():
+            return jsonify({'error': 'title must be a non-empty string'}), 400
+        w.title = str(title).strip()
+
+    if 'workout_type_id' in body:
+        workout_type_id = _int_or_none(body.get('workout_type_id'))
+        if workout_type_id is not None:
+            if db.session.query(WorkoutTypes).filter(WorkoutTypes.workout_type_id == workout_type_id).first() is None:
+                return jsonify({'error': 'Invalid workout_type_id'}), 400
+        w.workout_type_id = workout_type_id
+
+    if 'workout_plan_id' in body:
+        workout_plan_id = _int_or_none(body.get('workout_plan_id'))
+        if workout_plan_id is not None:
+            if db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == workout_plan_id).first() is None:
+                return jsonify({'error': 'Invalid workout_plan_id'}), 400
+        w.workout_plan_id = workout_plan_id
+
+    db.session.commit()
+    return jsonify({
+        'workout_id': w.workout_id,
+        'user_id': str(w.user_id),
+        'title': w.title,
+        'workout_type_id': w.workout_type_id,
+        'workout_plan_id': w.workout_plan_id,
+    }), 200
+
+
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['DELETE'])
 @require_auth
 def delete_workout(workout_id):
@@ -2008,8 +2080,19 @@ def delete_workout(workout_id):
     if w.user_id != g.user.user_id:
         return jsonify({'error': 'You are not authorized to delete this workout'}), 403
 
-    db.session.delete(w)
-    db.session.commit()
+    try:
+        # Explicitly delete child rows first for environments where ORM/DB cascade
+        # behavior differs and parent-only delete can fail.
+        db.session.query(WorkoutExercises).filter(
+            WorkoutExercises.workout_id == workout_id
+        ).delete(synchronize_session=False)
+
+        db.session.delete(w)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete workout'}), 500
+
     return jsonify({'message': 'Workout deleted'}), 200
 
 
