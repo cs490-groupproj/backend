@@ -7,6 +7,8 @@ from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
 from sqlalchemy import func
 
+from auth.util import can_access_client_endpoint 
+
 def _build_coach_json(coach):
 
     survey = coach[0].coach_surveys[0] if coach[0].coach_surveys else None
@@ -274,9 +276,6 @@ def add_initial_goals(user_id):
         409:
             description: User already has completed the initial goal survey.
     """
-    role_err = _require_client_role()
-    if role_err is not None:
-        return role_err
 
     try:
         requested_user_id = UUID(user_id)
@@ -522,18 +521,14 @@ def get_daily_survey_history(user_id):
         400:
             description: Invalid UUID or day
     """
-    role_err = _require_client_role()
-    if role_err is not None:
-        return role_err
-
     try:
         requested_user_id = UUID(user_id)
     except (ValueError, TypeError, AttributeError):
         return jsonify({'error': 'invalid uuid'}), 400
 
-    if requested_user_id != g.user.user_id:
+    if not can_access_client_endpoint(g.user, requested_user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to view this content'}), 403
-
+    
     days = request.args.get('days', default=7, type=int)
     if days is None or days < 1 or days > 366:
         return jsonify({'error': 'days must be an integer between 1 and 366'}), 400
