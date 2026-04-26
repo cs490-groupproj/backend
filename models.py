@@ -41,6 +41,21 @@ class ClientBilling(db.Model):
     client_coaches = db.relationship('ClientCoaches', back_populates='client_billing')
 
 
+class ClientProgress(db.Model):
+    __tablename__ = 'client_progress'
+    __table_args__ = (
+        PrimaryKeyConstraint('client_progress_id', name='PK__client_p__F8DF02FD8CC32D52'),
+        ForeignKeyConstraint(['user_id'], name='FK_ClientProgress_ClientId', refcolumns=['users.user_id']),
+    )
+
+    client_progress_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    user_id = db.Column(Uuid, nullable=False)
+    blob_name = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    type = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    date_uploaded = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+
+    client = db.relationship('Users', back_populates='client_progress')
+
 class ExerciseCategories(db.Model):
     __tablename__ = 'exercise_categories'
     __table_args__ = (
@@ -117,6 +132,7 @@ class Users(db.Model):
     email = db.Column(String(50, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
     is_coach = db.Column(Boolean, nullable=False)
     is_client = db.Column(Boolean, nullable=False, server_default=text('((1))'))
+    is_admin = db.Column(Boolean, nullable=False, server_default=text('((0))'))
     is_active = db.Column(Boolean, nullable=False)
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     coach_cost = db.Column(Integer)
@@ -125,6 +141,7 @@ class Users(db.Model):
     client_coaches_coach = db.relationship('ClientCoaches', foreign_keys='[ClientCoaches.coach_id]', back_populates='coach')
     client_billing = db.relationship('ClientBilling', foreign_keys='[ClientBilling.client_id]', back_populates='client')
     client_goals = db.relationship('ClientGoals', back_populates='user')
+    client_progress = db.relationship('ClientProgress', back_populates='client')
     coach_reviews = db.relationship('CoachReviews', foreign_keys='[CoachReviews.coach_id]', back_populates='coach')
     coach_reviews_left = db.relationship('CoachReviews', foreign_keys='[CoachReviews.left_by_user_id]', back_populates='left_by_user')
     coach_reports = db.relationship('CoachReports', back_populates='coach', uselist=False)
@@ -272,7 +289,6 @@ class CoachSurveys(db.Model):
     coach_survey_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
     user_id = db.Column(Uuid, nullable=False)
     specialization = db.Column(String(20, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
-    certifications = db.Column(String(255, 'SQL_Latin1_General_CP1_CI_AS'), nullable=True)
     qualifications = db.Column(TEXT(16, 'SQL_Latin1_General_CP1_CI_AS'))
     date_created = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
     last_update = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))

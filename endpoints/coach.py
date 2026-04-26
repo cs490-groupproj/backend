@@ -148,6 +148,8 @@ def my_clients():
             schema:
                 type: object
                 properties:
+                    total_results:
+                        type: integer
                     clients:
                         type: array
                         items:
@@ -163,6 +165,7 @@ def my_clients():
     relationships = db.session.query(ClientCoaches).filter(ClientCoaches.coach_id == g.user.user_id).all()
 
     return jsonify({
+        'total_results': len(relationships),
         'clients': [{
             'client_id': r.client.user_id,
             'first_name': r.client.first_name,
@@ -200,6 +203,10 @@ def request_coach(coach_id):
     coach = db.session.query(Users).filter(Users.user_id == coach_id).filter(Users.is_coach == True).filter(Users.is_active == True).first()
     if coach is None:
         return jsonify({'message': 'coach does not exist'}), 404
+
+    request_check = db.session.query(CoachRequests).filter(CoachRequests.coach_id == coach_id).filter(CoachRequests.client_id == g.user.user_id).first()
+    if request_check is not None:
+        return jsonify({'message': 'Request already exists'}), 400
 
     client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
 
@@ -470,7 +477,7 @@ def remove_client():
         return jsonify({'message': 'User does not coach client'}), 400
 
     relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).all()
-    if relationship is None:
+    if relationship is None or not relationship:
         return jsonify({'message': 'Relationship does not exist'}), 404
 
     db.session.delete(relationship.client_billing)
