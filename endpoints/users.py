@@ -535,7 +535,7 @@ def get_user_profile(user_id):
         409:
             description: User has already submitted a coach survey
         """
-    _, err = _ensure_self(user_id)
+    target_uid, err = _ensure_self(user_id)
     if err:
         return err
     u = db.session.query(Users).filter(Users.user_id == target_uid).first()
