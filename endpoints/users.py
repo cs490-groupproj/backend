@@ -173,18 +173,6 @@ def register_user():
     if first_name is None or last_name is None or email is None:
         return jsonify({'error': 'JSON must include first_name, last_name, and email'}), 400
 
-    is_coach = body.get('is_coach')
-    if is_coach is None:
-        return jsonify({'error': 'JSON must include is_coach'}), 400
-    is_coach = _coerce_bool(is_coach)
-    if 'is_client' in body:
-        is_client = _coerce_bool(body.get('is_client'))
-        # Initial registration must choose exactly one role.
-        if is_client == is_coach:
-            return jsonify({'error': 'At registration, exactly one of is_coach or is_client must be true'}), 400
-    else:
-        is_client = not is_coach
-
     is_active = body.get('is_active', True)
 
     new_user = Users()
@@ -192,8 +180,8 @@ def register_user():
     new_user.first_name = first_name
     new_user.last_name = last_name
     new_user.email = email
-    new_user.is_coach = is_coach
-    new_user.is_client = is_client
+    new_user.is_coach = False
+    new_user.is_client = True
     new_user.is_active = _coerce_bool(is_active)
 
     db.session.add(new_user)
