@@ -1364,10 +1364,13 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
             description: Workout plan exercise not found
 
     """
-    pe = db.session.query(WorkoutPlanExercises).filter(
-        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
-    ).first()
-    if pe is None:
+    pe_row = (
+        db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
+        .filter(WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id)
+        .first()
+    )
+    if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
     if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
@@ -1408,10 +1411,13 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
             description: Workout plan exercise not found
 
     """
-    pe = db.session.query(WorkoutPlanExercises).filter(
-        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
-    ).first()
-    if pe is None:
+    pe_row = (
+        db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
+        .filter(WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id)
+        .first()
+    )
+    if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
     if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
