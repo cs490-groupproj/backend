@@ -194,3 +194,71 @@ def get_message_history():
             ]
         }
     ), 200
+
+
+@message_blueprint.route('/chatters', methods=['GET'])
+@require_auth
+def get_chatters():
+    """
+        Get all chat participants (clients + coaches) for the logged-in user
+        ---
+        tags:
+            - Messages
+        responses:
+            200:
+                description: List of users the current user can chat with
+                schema:
+                    type: object
+                    properties:
+                        chatters:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    user_id:
+                                        type: string
+                                    first_name:
+                                        type: string
+                                    last_name:
+                                        type: string
+            401:
+               description: Unauthorized
+        """
+    user = g.user
+
+    def to_user(u):
+        return {
+            "user_id": u.user_id,
+            "first_name": u.first_name,
+            "last_name": u.last_name,
+        }
+
+    chatters_map = {}
+
+    if user.is_client:
+        coaches = (
+            db.session.query(Users)
+            .join(ClientCoaches, ClientCoaches.coach_id == Users.user_id)
+            .filter(ClientCoaches.client_id == user.user_id)
+            .filter(Users.is_active == True)
+            .all()
+        )
+        
+        for coach in coaches:
+            chatters_map[coach.user_id] = to_user(coach)
+            
+    if user.is_coach:
+        clients = (
+            db.session.query(Users)
+            .join(ClientCoaches, ClientCoaches.client_id == Users.user_id)
+            .filter(ClientCoaches.coach_id == user.user_id)
+            .filter(Users.is_active == True)
+            .all()
+        )
+
+        for client in clients:
+            chatters_map[client.user_id] = to_user(client)
+
+    chatters = list(chatters_map.values())
+    chatters.sort(key=lambda user: (user["first_name"], user["last_name"]))
+    return jsonify({"chatters": chatters}), 200
