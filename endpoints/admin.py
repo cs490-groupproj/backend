@@ -295,7 +295,11 @@ def reject_report():
 
     report = db.session.query(CoachReports).filter(CoachReports.coach_report_id == report_id).first()
 
+    if report is None:
+        return jsonify({'message': 'Coach report not found'}), 404
+
     db.session.delete(report)
+    db.session.commit()
 
     return jsonify({
         'message': 'Rejected report'
@@ -415,7 +419,7 @@ def make_coach():
 
     user = db.session.query(Users).filter(Users.user_id == user_id).first()
     user.is_coach = True
-    
+
     db.session.commit()
 
     return jsonify({
