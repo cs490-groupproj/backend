@@ -99,6 +99,57 @@ def _validate_optional_qualifications(value):
 @users_blueprint.route('/register', methods=['POST'])
 @require_auth
 def register_user():
+    """
+    Register a new user
+    ---
+    tags:
+        - Users
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                first_name:
+                    type: string
+                last_name:
+                    type: string
+                email:
+                    type: string
+                is_coach:
+                    type: integer
+                is_client:
+                    type: integer
+                is_active:
+                    type: integer
+                    required: false
+    responses:
+        201:
+            description: Register a user
+            schema:
+                type: object
+                properties:
+                    user_id:
+                        type: string
+                    first_name:
+                        type: string
+                    last_name:
+                        type: string
+                    email:
+                        type: string
+                    is_coach:
+                        type: integer
+                    is_client:
+                        type: integer
+                    is_active:
+                        type: integer
+        400:
+            description: Error with parameters
+
+        409:
+            description: User is already registered
+    """
     body = request.get_json(silent=True) or {}
     firebase_uid = _firebase_uid()
 
@@ -152,16 +203,85 @@ def register_user():
 @users_blueprint.route('/me', methods=['GET'])
 @require_auth
 def get_me():
+    """
+    Get logged-in user ID
+    ---
+    tags:
+        - Users
+    responses:
+        200:
+            description: Get current user
+            schema:
+                type: object
+                properties:
+                    user_id:
+                        type: string
+                    is_coach:
+                        type: boolean
+                    is_client:
+                        type: boolean
+                    is_admin:
+                        type: boolean
+    """
     return jsonify({
         'user_id': str(g.user.user_id),
         'is_coach': g.user.is_coach,
         'is_client': g.user.is_client,
+        'is_admin': g.user.is_admin,
     }), 200
 
 
 @users_blueprint.route('/onboarding/submit_coach_survey', methods=['POST'])
 @require_auth
 def submit_coach_survey():
+    """
+    Submit initial coach onboarding survey
+    ---
+    tags:
+        - Users
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                specialization:
+                    type: string
+                qualifications:
+                    type: string
+                certifications:
+                    type: string
+                    required: false
+                coach_cost:
+                    type: integer
+    responses:
+        201:
+            description: Submit onboarding survey
+            schema:
+                type: object
+                properties:
+                    coach_survey_id:
+                        type: integer
+                    user_id:
+                        type: string
+                    specialization:
+                        type: string
+                    qualifications:
+                        type: string
+                    coach_cost:
+                        type: integer
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+
+        400:
+            description: Error with parameters
+
+        409:
+            description: User has already submitted a coach survey
+        """
     if db.session.query(CoachSurveys).filter(CoachSurveys.user_id == g.user.user_id).count() > 0:
         return jsonify({
             'error': 'A coach survey already exists. Use PATCH /users/onboarding/coach_survey to update it.',
@@ -179,6 +299,8 @@ def submit_coach_survey():
     if q_err is not None:
         return q_err, 400
 
+    certifications = body.get('certifications')
+
     coach_cost = body.get('coach_cost')
     if coach_cost is not None:
         try:
@@ -192,8 +314,9 @@ def submit_coach_survey():
     row.user_id = g.user.user_id
     row.specialization = specialization
     row.qualifications = qualifications
+    row.certifications = certifications
     row.last_update = _now_naive_utc()
-    g.user.is_coach = True
+    row.is_client = True
     if coach_cost is not None:
         g.user.coach_cost = coach_cost
 
@@ -215,6 +338,59 @@ def submit_coach_survey():
 @users_blueprint.route('/onboarding/coach_survey', methods=['PATCH'])
 @require_auth
 def patch_coach_survey():
+    """
+    Update coach onboarding survey
+    ---
+    tags:
+        - Users
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                coach_survey_id:
+                    type: integer
+                specialization:
+                    type: string
+                qualifications:
+                    type: string
+                certifications:
+                    type: string
+                    required: false
+                coach_cost:
+                    type: integer
+    responses:
+        200:
+            description: Update onboarding survey
+            schema:
+                type: object
+                properties:
+                    coach_survey_id:
+                        type: integer
+                    user_id:
+                        type: string
+                    specialization:
+                        type: string
+                    qualifications:
+                        type: string
+                    coach_cost:
+                        type: integer
+                    date_created:
+                        type: string
+                    last_updated:
+                        type: string
+
+        400:
+            description: Error with parameters
+
+        404:
+            description: Survey not found
+
+        409:
+            description: User has already submitted a coach survey
+        """
     body = request.get_json(silent=True) or {}
     survey = None
     if (sid := body.get('coach_survey_id')) is not None:
@@ -243,6 +419,11 @@ def patch_coach_survey():
             return q_err, 400
         survey.qualifications = qualifications
 
+    if 'certifications' in body:
+        certifications = body.get('certifications')
+        survey.certifications = certifications
+
+
     if 'coach_cost' in body:
         coach_cost = body['coach_cost']
         if coach_cost is None:
@@ -265,6 +446,7 @@ def patch_coach_survey():
         'user_id': str(survey.user_id),
         'specialization': survey.specialization,
         'qualifications': survey.qualifications,
+        'certifications': survey.certifications,
         'coach_cost': g.user.coach_cost,
         'date_created': survey.date_created.isoformat() if survey.date_created else None,
         'last_update': survey.last_update.isoformat() if survey.last_update else None,
@@ -274,6 +456,74 @@ def patch_coach_survey():
 @users_blueprint.route('/<user_id>/profile', methods=['GET'])
 @require_auth
 def get_user_profile(user_id):
+    """
+    Get user profile
+    ---
+    tags:
+        - Users
+    responses:
+        200:
+            description: Get user profile
+            schema:
+                type: object
+                properties:
+                    user_id:
+                        type: string
+                    first_name:
+                        type: string
+                    last_name:
+                        type: string
+                    email:
+                        type: string
+                    is_coach:
+                        type: string
+                    is_client:
+                        type: string
+                    is_admin:
+                        type: string
+                    coach_cost:
+                        type: integer
+                    is_active:
+                        type: boolean
+                    date_created:
+                        type: string
+                    coach_survey:
+                        type: object
+                        properties:
+                            coach_survey_id:
+                                type: integer
+                            specialization:
+                                type: integer
+                            qualifications:
+                                type: integer
+                            date_created:
+                                type: string
+                            last_updated:
+                                type: string
+                    client_goals:
+                        type: object
+                        properties:
+                            user_survey_id:
+                                type: integer
+                            primary_goals_binary:
+                                type: string
+                            weight_goal:
+                                type: integer
+                            exercise_minutes_goal:
+                                type: integer
+                            personal_goals:
+                                type: string
+                            date_created:
+                                type: string
+                            last_modified:
+                                type: string
+
+        400:
+            description: Error with parameters
+
+        409:
+            description: User has already submitted a coach survey
+        """
     _, err = _ensure_self(user_id)
     if err:
         return err
@@ -286,6 +536,7 @@ def get_user_profile(user_id):
         'email': u.email,
         'is_coach': u.is_coach,
         'is_client': u.is_client,
+        'is_admin': u.is_admin,
         'coach_cost': u.coach_cost,
         'is_active': u.is_active,
         'date_created': u.date_created.isoformat() if u.date_created else None,
@@ -323,6 +574,45 @@ def get_user_profile(user_id):
 @users_blueprint.route('/<user_id>/edit_account', methods=['PATCH'])
 @require_auth
 def edit_user_account(user_id):
+    """
+    Edit user account
+    ---
+    tags:
+        - Users
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+            type: object
+            properties:
+                first_name:
+                    type: string
+                last_name:
+                    type: string
+                email:
+                    type: string
+    responses:
+        200:
+            description: Edit user account
+            schema:
+                type: object
+                properties:
+                    user_id:
+                        type: string
+                    first_name:
+                        type: string
+                    last_name:
+                        type: string
+                    email:
+                        type: string
+
+        400:
+            description: Error with parameters
+
+        502:
+            description: Failed to update email in Firebase
+        """
     _, err = _ensure_self(user_id)
     if err:
         return err
@@ -358,10 +648,34 @@ def edit_user_account(user_id):
 @users_blueprint.route('/<user_id>/delete_account', methods=['POST'])
 @require_auth
 def delete_user_account(user_id):
+    """
+    Delete user account
+    ---
+    tags:
+        - Users
+    responses:
+        200:
+            description: Delete user account
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+                    user_id:
+                        type: string
+                    is_active:
+                        type: boolean
+        400:
+            description: Error with parameters
+
+        409:
+            description: User has already submitted a coach survey
+        """
     _, err = _ensure_self(user_id)
     if err:
         return err
 
+    firebase_auth.delete_user(g.user.firebase_user_id)
     g.user.is_active = False
     db.session.commit()
 

@@ -275,6 +275,24 @@ def _exercise_exists(exercise_id: int) -> bool:
 @workouts_blueprint.route('/exercise-categories', methods=['GET'])
 @require_auth
 def list_exercise_categories():
+    """
+    List exercise categories
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get exercise categories
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        category_id:
+                            type: integer
+                        name:
+                            type: string
+    """
     rows = db.session.query(ExerciseCategories).order_by(ExerciseCategories.name).all()
     return jsonify([{'category_id': r.category_id, 'name': r.name} for r in rows]), 200
 
@@ -282,6 +300,25 @@ def list_exercise_categories():
 @workouts_blueprint.route('/body-parts', methods=['GET'])
 @require_auth
 def list_body_parts():
+    """
+    List body parts
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get body parts
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        body_part_id:
+                            type: integer
+                        name:
+                            type: string
+
+    """
     rows = db.session.query(BodyParts).order_by(BodyParts.name).all()
     return jsonify([{'body_part_id': r.body_part_id, 'name': r.name} for r in rows]), 200
 
@@ -289,6 +326,25 @@ def list_body_parts():
 @workouts_blueprint.route('/workout-types', methods=['GET'])
 @require_auth
 def list_workout_types():
+    """
+    List workout types
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get workout types
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_type_id:
+                            type: integer
+                        name:
+                            type: string
+
+    """
     rows = db.session.query(WorkoutTypes).order_by(WorkoutTypes.name).all()
     response = [{'workout_type_id': r.workout_type_id, 'name': r.name} for r in rows]
     print(f"[WORKOUTS DEBUG] GET /workout-types response: {response}")
@@ -301,6 +357,35 @@ def list_workout_types():
 @workouts_blueprint.route('/exercises', methods=['GET'])
 @require_auth
 def list_exercises():
+    """
+    List exercises
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get exercise categories
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        exercise_id:
+                            type: integer
+                        name:
+                            type: string
+                        youtube_url:
+                            type: string
+                        body_part_id:
+                            type: integer
+                        category_id:
+                            type: integer
+                        body_part:
+                            type: string
+                        category:
+                            type: string
+
+    """
     rows = (
         db.session.query(Exercises)
         .options(joinedload(Exercises.body_part), joinedload(Exercises.category))
@@ -325,6 +410,36 @@ def list_exercises():
 @workouts_blueprint.route('/exercises/<int:exercise_id>', methods=['GET'])
 @require_auth
 def get_exercise(exercise_id):
+    """
+    Get exercise
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get exercise
+            schema:
+                type: object
+                properties:
+                    exercise_id:
+                        type: integer
+                    name:
+                        type: string
+                    youtube_url:
+                        type: string
+                    body_part_id:
+                        type: integer
+                    category_id:
+                        type: integer
+                    body_part:
+                        type: string
+                    category:
+                        type: string
+
+        404:
+            description: Exercise not found
+
+    """
     e = (
         db.session.query(Exercises)
         .options(joinedload(Exercises.body_part), joinedload(Exercises.category))
@@ -350,6 +465,36 @@ def get_exercise(exercise_id):
 @workouts_blueprint.route('/workout-plans', methods=['GET'])
 @require_auth
 def list_workout_plans():
+    """
+    List workout plans
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: created_by
+          in: path
+          type: string
+          required: true
+    responses:
+        200:
+            description: Get workout plans
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_plan_id:
+                            type: integer
+                        title:
+                            type: string
+                        created_by:
+                            type: string
+                        duration_min:
+                            type: integer
+        400:
+            description: Invalid parameters
+
+    """
     created_by_raw = request.args.get('created_by')
     q = db.session.query(WorkoutPlans)
     accessible_user_ids = [g.user.user_id] + g.clients_ids
@@ -381,6 +526,80 @@ def list_workout_plans():
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['GET'])
 @require_auth
 def get_workout_plan(plan_id):
+    """
+    Get workout plan
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get workout plan
+            schema:
+                type: object
+                properties:
+                    workout_plan_id:
+                        type: integer
+                    title:
+                        type: string
+                    workout_type_id:
+                        type: integer
+                    description:
+                        type: string
+                    created_by:
+                        type: string
+                    duration_min:
+                        type: integer
+                    assignments:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                id:
+                                    type: integer
+                                workout_plan_id:
+                                    type: integer
+                                weekday:
+                                    type: string
+                                schedule_time:
+                                    type: string
+                    exercises:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                workout_plan_exercise_id:
+                                    type: integer
+                                workout_plan_id:
+                                    type: integer
+                                exercise_id:
+                                    type: integer
+                                name:
+                                    type: string
+                                position:
+                                    type: integer
+                                sets:
+                                    type: integer
+                                reps:
+                                    type: integer
+                                weight:
+                                    type: number
+                                rpe:
+                                    type: number
+                                duration_sec:
+                                    type: integer
+                                distance_m:
+                                    type: number
+                                pace_sec_per_km:
+                                    type: number
+                                calories:
+                                    type: integer
+                                notes:
+                                    type: string
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = (
         db.session.query(WorkoutPlans)
         .options(
@@ -411,6 +630,40 @@ def get_workout_plan(plan_id):
 @workouts_blueprint.route('/workout-plans', methods=['POST'])
 @require_auth
 def create_workout_plan():
+    """
+    Create workout plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                title:
+                    type: string
+                workout_type_id:
+                    type: integer
+                description:
+                    type: string
+                duration_min:
+                    type: integer
+                created_by:
+                    type: string
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    workout_plan_id:
+                        type: integer
+        400:
+            description: Invalid parameters
+
+    """
     body = request.get_json(silent=True) or {}
     title = body.get('title')
     if not title or not str(title).strip():
@@ -444,6 +697,43 @@ def create_workout_plan():
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['PATCH'])
 @require_auth
 def update_workout_plan(plan_id):
+    """
+    Update workout plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                title:
+                    type: string
+                workout_type_id:
+                    type: integer
+                description:
+                    type: string
+                duration_min:
+                    type: integer
+                created_by:
+                    type: string
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
@@ -493,6 +783,42 @@ def update_workout_plan(plan_id):
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/exercises', methods=['POST'])
 @require_auth
 def add_plan_exercises(plan_id):
+    """
+    Add exercise to workout plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                exercises:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            exercise_id:
+                                type: integer
+                            position:
+                                type: integer
+    responses:
+        200:
+            description: Get workout plan exercises
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
@@ -525,6 +851,54 @@ def add_plan_exercises(plan_id):
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['POST'])
 @require_auth
 def add_plan_assignments(plan_id):
+    """
+    Update workout plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                assignments:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            weekday:
+                                type: string
+                            schedule_time:
+                                type: string
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    assignments:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                                id:
+                                    type: integer
+                                workout_plan_id:
+                                    type: integer
+                                weekday:
+                                    type: string
+                                schedule_time:
+                                    type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
@@ -570,6 +944,32 @@ def add_plan_assignments(plan_id):
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['GET'])
 @require_auth
 def list_plan_assignments(plan_id):
+    """
+    List workout plan assignments
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        id:
+                            type: integer
+                        workout_plan_id:
+                            type: integer
+                        weekday:
+                            type: string
+                        schedule_time:
+                            type: string
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
@@ -589,12 +989,34 @@ def list_plan_assignments(plan_id):
 @workouts_blueprint.route('/workout-plan-assignments/<int:assignment_id>', methods=['DELETE'])
 @require_auth
 def delete_plan_assignment(assignment_id):
+<<<<<<< HEAD
     assignment = (
         db.session.query(WorkoutPlanDays, WorkoutPlans.created_by)
         .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanDays.workout_plan_id)
         .filter(WorkoutPlanDays.id == assignment_id)
         .first()
     )
+=======
+    """
+    Delete workout plan assignment
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        404:
+            description: Workout plan not found
+
+    """
+    assignment = db.session.query(WorkoutPlanDays).filter(WorkoutPlanDays.id == assignment_id).first()
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
     if assignment is None:
         return jsonify({'error': 'Workout plan assignment not found'}), 404
     assignment_row, plan_owner_id = assignment
@@ -609,6 +1031,7 @@ def delete_plan_assignment(assignment_id):
 @workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['PUT'])
 @require_auth
 def update_workout_plan_exercise(workout_plan_exercise_id):
+<<<<<<< HEAD
     pe_row = (
         db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
         .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
@@ -616,6 +1039,63 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
         .first()
     )
     if pe_row is None:
+=======
+    """
+    Create workout plan exercise
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          type: body
+          required: true
+          schema:
+            type: object
+            properties:
+                exercise_id:
+                    type: integer
+                position:
+                    type: integer
+                sets:
+                    type: integer
+                reps:
+                    type: integer
+                weight:
+                    type: number
+                rpe:
+                    type: number
+                duration_sec:
+                    type: integer
+                distance_m:
+                    type: number
+                pace_sec_per_km:
+                    type: number
+                calories:
+                    type: integer
+                notes:
+                    type: string
+
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan exercise not found
+
+    """
+    pe = db.session.query(WorkoutPlanExercises).filter(
+        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
+    ).first()
+    if pe is None:
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
     if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
@@ -638,6 +1118,7 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
 @workouts_blueprint.route('/workout-plan-exercises/<int:workout_plan_exercise_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_plan_exercise(workout_plan_exercise_id):
+<<<<<<< HEAD
     pe_row = (
         db.session.query(WorkoutPlanExercises, WorkoutPlans.created_by)
         .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanExercises.workout_plan_id)
@@ -645,6 +1126,30 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
         .first()
     )
     if pe_row is None:
+=======
+    """
+    Delete workout plan exercise
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Delete workout plan exercise
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        404:
+            description: Workout plan exercise not found
+
+    """
+    pe = db.session.query(WorkoutPlanExercises).filter(
+        WorkoutPlanExercises.workout_plan_exercise_id == workout_plan_exercise_id
+    ).first()
+    if pe is None:
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
     if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
@@ -658,6 +1163,24 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_plan(plan_id):
+    """
+    Delete workout plan
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Create workout plan
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
@@ -676,6 +1199,66 @@ def delete_workout_plan(plan_id):
 @workouts_blueprint.route('/workouts', methods=['POST'])
 @require_auth
 def create_workout():
+    """
+    Create workout
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                title:
+                    type: string
+                workout_type_id:
+                    type: integer
+                workout_plan_id:
+                    type: integer
+                notes:
+                    type: string
+                mood:
+                    type: integer
+                duration_mins:
+                    type: integer
+                completion_date:
+                    type: string
+    responses:
+        201:
+            description: Create workout
+            schema:
+                type: object
+                properties:
+                    workout_id:
+                        type: integer
+                    user_id:
+                        type: string
+                    title:
+                        type: string
+                    workout_type_id:
+                        type: integer
+                    workout_plan_id:
+                        type: integer
+                    notes:
+                        type: string
+                    mood:
+                        type: integer
+                    duration_mins:
+                        type: integer
+                    completion_date:
+                        type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     body = request.get_json(silent=True) or {}
     uid = _parse_uuid(body.get('user_id'))
     if uid is None:
@@ -728,6 +1311,50 @@ def create_workout():
 @workouts_blueprint.route('/workouts/from-plan/<int:plan_id>', methods=['POST'])
 @require_auth
 def create_workout_from_plan(plan_id):
+    """
+    Create workout from plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                completion_date:
+                    type: string
+                notes:
+                    type: string
+                mood:
+                    type: integer
+                duration_mins:
+                    type: integer
+    responses:
+        201:
+            description: Create workout from plan
+            schema:
+                type: object
+                properties:
+                    workout_id:
+                        type: integer
+                    notes:
+                        type: string
+                    mood:
+                        type: integer
+                    duration_mins:
+                        type: integer
+                    completion_date:
+                        type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     plan = (
         db.session.query(WorkoutPlans)
         .options(joinedload(WorkoutPlans.workout_plan_exercises))
@@ -801,6 +1428,42 @@ def create_workout_from_plan(plan_id):
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['PATCH'])
 @require_auth
 def update_workout(workout_id):
+    """
+    Update workout
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                notes:
+                    type: string
+                mood:
+                    type: integer
+                duration_mins:
+                    type: integer
+                completion_date:
+                    type: string
+    responses:
+        200:
+            description: Update workout
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout not found
+
+    """
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
@@ -836,6 +1499,44 @@ def update_workout(workout_id):
 @workouts_blueprint.route('/workouts', methods=['GET'])
 @require_auth
 def list_user_workouts():
+    """
+    List user workouts
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+    responses:
+        200:
+            description: List workouts
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_id:
+                            type: integer
+                        title:
+                            type: string
+                        notes:
+                            type: string
+                        mood:
+                            type: integer
+                        duration_mins:
+                            type: integer
+                        completion_date:
+                            type: string
+
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     uid_raw = request.args.get('user_id')
     uid = _parse_uuid(uid_raw)
     if uid is None:
@@ -875,6 +1576,36 @@ def list_user_workouts():
 @workouts_blueprint.route('/workouts/history/sets-logged', methods=['GET'])
 @require_auth
 def workout_sets_logged_history():
+    """
+    Get sets logged history
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+        - name: days
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get historical sets logged
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_id:
+                            type: integer
+                        sets_logged:
+                            type: integer
+                        completion_date:
+                            type: string
+
+    """
     uid, uid_err = _require_authorized_user_id()
     if uid_err is not None:
         return uid_err
@@ -914,6 +1645,36 @@ def workout_sets_logged_history():
 @workouts_blueprint.route('/workouts/history/total-workout-time', methods=['GET'])
 @require_auth
 def workout_total_time_history():
+    """
+    Get workout time logged history
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+        - name: days
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get historical workout time logged
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_id:
+                            type: integer
+                        total_workout_time:
+                            type: integer
+                        completion_date:
+                            type: string
+
+    """
     uid, uid_err = _require_authorized_user_id()
     if uid_err is not None:
         return uid_err
@@ -951,6 +1712,36 @@ def workout_total_time_history():
 @workouts_blueprint.route('/workouts/history/total-volume', methods=['GET'])
 @require_auth
 def workout_total_volume_history():
+    """
+    Get total volume logged history
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+        - name: days
+          in: path
+          required: true
+          type: integer
+    responses:
+        200:
+            description: Get historical volume logged
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_id:
+                            type: integer
+                        total_volume:
+                            type: integer
+                        completion_date:
+                            type: string
+
+    """
     uid, uid_err = _require_authorized_user_id()
     if uid_err is not None:
         return uid_err
@@ -998,6 +1789,54 @@ def workout_total_volume_history():
 @workouts_blueprint.route('/workouts/current-week', methods=['GET'])
 @require_auth
 def list_user_weekly_assignments():
+    """
+    Get weekly workout assignments
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: path
+          required: true
+          type: string
+    responses:
+        200:
+            description: Get weekly assignments
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_id:
+                            type: integer
+                        title:
+                            type: string
+                        workout_plan_id:
+                            type: integer
+                        notes:
+                            type: string
+                        mood:
+                            type: integer
+                        duration_mins:
+                            type: integer
+                        completion_date:
+                            type: string
+                        assignments:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    id:
+                                        type: integer
+                                    weekday:
+                                        type: string
+                                    schedule_time:
+                                        type: string
+
+        400:
+            description: Invalid parameters
+
+    """
     uid_raw = request.args.get('user_id')
     uid = _parse_uuid(uid_raw)
     if uid is None:
@@ -1054,6 +1893,44 @@ def list_user_weekly_assignments():
 @workouts_blueprint.route("/workouts/my_schedule", methods=['GET'])
 @require_auth
 def get_user_schedule():
+    """
+        Get weekly workout assignments
+        ---
+        tags:
+            - Workouts
+        parameters:
+            - name: user_id
+              in: query
+              required: true
+              type: string
+        responses:
+            200:
+                description: Get schedule
+                schema:
+                    type: object
+                    properties:
+                        my_schedule:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    assignment_id:
+                                        type: integer
+                                    weekday:
+                                        type: string
+                                    schedule_time:
+                                        type: string
+                                    workout_plan_id:
+                                        type: integer
+                                    title:
+                                        type: string
+                                    duration_mins:
+                                        type: integer
+
+            400:
+                description: Invalid parameters
+
+    """
     uid_raw = request.args.get('user_id')
     target_uid = _parse_uuid(uid_raw)
     if target_uid is None:
@@ -1094,12 +1971,98 @@ def get_user_schedule():
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
 @require_auth
 def get_workout(workout_id):
+<<<<<<< HEAD
     w = (
         db.session.query(Workouts)
         .options(joinedload(Workouts.workout_exercises).joinedload(WorkoutExercises.exercise))
         .filter(Workouts.workout_id == workout_id)
         .first()
     )
+=======
+    """
+        Get workout
+        ---
+        tags:
+            - Workouts
+        responses:
+            200:
+                description: Get weekly assignments
+                schema:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            workout_id:
+                                type: integer
+                            user_id:
+                                type: string
+                            title:
+                                type: string
+                            workout_type_id:
+                                type: integer
+                            workout_plan_id:
+                                type: integer
+                            notes:
+                                type: string
+                            mood:
+                                type: string
+                            duration_mins:
+                                type: string
+                            completion_date:
+                                type: string
+                            assignments:
+                                type: array
+                                items:
+                                    type: object
+                                    properties:
+                                        id:
+                                            type: integer
+                                        workout_plan_id:
+                                            type: integer
+                                        weekday:
+                                            type: string
+                                        schedule_time:
+                                            type: string
+                            exercises:
+                                type: array
+                                items:
+                                    type: object
+                                    properties:
+                                        workout_plan_exercise_id:
+                                            type: integer
+                                        workout_plan_id:
+                                            type: integer
+                                        exercise_id:
+                                            type: integer
+                                        name:
+                                            type: string
+                                        position:
+                                            type: integer
+                                        sets:
+                                            type: integer
+                                        reps:
+                                            type: integer
+                                        weight:
+                                            type: number
+                                        rpe:
+                                            type: number
+                                        duration_sec:
+                                            type: integer
+                                        distance_m:
+                                            type: number
+                                        pace_sec_per_km:
+                                            type: number
+                                        calories:
+                                            type: integer
+                                        notes:
+                                            type: string
+
+            404:
+                description: Workout not found
+
+    """
+    w = _get_workout_for_user(workout_id, g.user.user_id)
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
     access_err = _ensure_workout_access(w)
@@ -1128,6 +2091,24 @@ def get_workout(workout_id):
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['DELETE'])
 @require_auth
 def delete_workout(workout_id):
+    """
+        Delete workout
+        ---
+        tags:
+            - Workouts
+        responses:
+            200:
+                description: Delete workout
+                schema:
+                    type: object
+                    properties:
+                        message:
+                            type: string
+
+            404:
+                description: Workout not found
+
+    """
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
@@ -1143,12 +2124,62 @@ def delete_workout(workout_id):
 @workouts_blueprint.route('/workouts/<int:workout_id>/exercises', methods=['GET'])
 @require_auth
 def list_workout_exercises(workout_id):
+<<<<<<< HEAD
     w = (
         db.session.query(Workouts)
         .options(joinedload(Workouts.workout_exercises).joinedload(WorkoutExercises.exercise))
         .filter(Workouts.workout_id == workout_id)
         .first()
     )
+=======
+    """
+        List workout exercises
+        ---
+        tags:
+            - Workouts
+        responses:
+            200:
+                description: Get workout exercises
+                schema:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            workout_plan_exercise_id:
+                                type: integer
+                            workout_plan_id:
+                                type: integer
+                            exercise_id:
+                                type: integer
+                            name:
+                                type: string
+                            position:
+                                type: integer
+                            sets:
+                                type: integer
+                            reps:
+                                type: integer
+                            weight:
+                                type: number
+                            rpe:
+                                type: number
+                            duration_sec:
+                                type: integer
+                            distance_m:
+                                type: number
+                            pace_sec_per_km:
+                                type: number
+                            calories:
+                                type: integer
+                            notes:
+                                type: string
+
+            404:
+                description: Workout not found
+
+    """
+    w = _get_workout_for_user(workout_id, g.user.user_id)
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
     access_err = _ensure_workout_access(w)
@@ -1162,6 +2193,44 @@ def list_workout_exercises(workout_id):
 @workouts_blueprint.route('/workouts/<int:workout_id>/exercises', methods=['POST'])
 @require_auth
 def add_workout_exercises(workout_id):
+    """
+    Add exercise to workout plan
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                exercises:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            exercise_id:
+                                type: integer
+                            position:
+                                type: integer
+    responses:
+        200:
+            description: Add workout exercise
+            schema:
+                type: object
+                properties:
+                    workout_exercise_ids:
+                        type: array
+                        items:
+                            type: integer
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
     w = db.session.query(Workouts).filter(Workouts.workout_id == workout_id).first()
     if w is None:
         return jsonify({'error': 'Workout not found'}), 404
@@ -1200,8 +2269,61 @@ def add_workout_exercises(workout_id):
 @workouts_blueprint.route('/workout-exercises/<int:workout_exercise_id>', methods=['PUT'])
 @require_auth
 def update_workout_exercise(workout_exercise_id):
+<<<<<<< HEAD
     row = (
         db.session.query(WorkoutExercises, Workouts.user_id)
+=======
+    """
+    Update workout exercise
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                position:
+                    type: integer
+                sets:
+                    type: integer
+                reps:
+                    type: integer
+                weight:
+                    type: number
+                rpe:
+                    type: number
+                duration_sec:
+                    type: integer
+                distance_m:
+                    type: number
+                pace_sec_per_km:
+                    type: number
+                calories:
+                    type: integer
+                notes:
+                    type: string
+
+    responses:
+        200:
+            description: Update workout exercise
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+        400:
+            description: Invalid parameters
+
+        404:
+            description: Workout plan not found
+
+    """
+    we = (
+        db.session.query(WorkoutExercises)
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
         .filter(
             WorkoutExercises.workout_exercise_id == workout_exercise_id,
@@ -1231,8 +2353,31 @@ def update_workout_exercise(workout_exercise_id):
 @workouts_blueprint.route('/workout-exercises/<int:workout_exercise_id>', methods=['DELETE'])
 @require_auth
 def delete_workout_exercise(workout_exercise_id):
+<<<<<<< HEAD
     row = (
         db.session.query(WorkoutExercises, Workouts.user_id)
+=======
+    """
+    Update workout exercise
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Delete workout exercise
+            schema:
+                type: object
+                properties:
+                    message:
+                        type: string
+
+        404:
+            description: Workout plan not found
+
+    """
+    we = (
+        db.session.query(WorkoutExercises)
+>>>>>>> 9b32d5ef301a57d2a3e82591e6e70e7f69ed2e2d
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
         .filter(
             WorkoutExercises.workout_exercise_id == workout_exercise_id,
