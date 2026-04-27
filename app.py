@@ -21,6 +21,7 @@ from endpoints.message import message_blueprint
 from endpoints.nutrition import nutrition_blueprint
 from endpoints.usda_proxy import usda_proxy_blueprint
 from endpoints.users import users_blueprint
+from endpoints.visitor import visitor_blueprint
 from endpoints.workouts import workouts_blueprint
 from endpoints.payments import payments_blueprint
 from endpoints.admin import admin_blueprint
@@ -66,6 +67,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(payments_blueprint, url_prefix='/payments')
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
     app.register_blueprint(progress_blueprint, url_prefix='/progress')
+    app.register_blueprint(visitor_blueprint, url_prefix='/visitors')
 
     init_firebase()
 
