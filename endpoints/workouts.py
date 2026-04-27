@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from auth.authentication import require_auth
-from auth.util import can_access_client_endpoint
+from auth.util import can_access_admin_endpoint, can_access_client_endpoint
 
 from models import (
     BodyParts,
@@ -48,6 +48,12 @@ def _parse_uuid(value):
         return UUID(str(value))
     except (ValueError, TypeError):
         return None
+
+
+def _require_admin():
+    if not can_access_admin_endpoint(g.user):
+        return jsonify({'message': 'You are not authorized to access this content'}), 401
+    return None
 
 
 def _num_or_none(v):
@@ -452,6 +458,190 @@ def get_exercise(exercise_id):
         'body_part': e.body_part.name if e.body_part else None,
         'category': e.category.name if e.category else None,
     }), 200
+
+
+@workouts_blueprint.route('/exercises', methods=['POST'])
+@require_auth
+def create_exercise():
+    """
+    Create exercise
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+                - name
+                - body_part_id
+                - category_id
+            properties:
+                name:
+                    type: string
+                    description: Display name for the exercise.
+                youtube_url:
+                    type: string
+                    description: Optional tutorial/reference video URL.
+                body_part_id:
+                    type: integer
+                    description: Existing body part id from GET /body-parts.
+                category_id:
+                    type: integer
+                    description: Existing exercise category id from GET /exercise-categories.
+    responses:
+        201:
+            description: Exercise created
+        400:
+            description: Invalid parameters
+        401:
+            description: Unauthorized
+    """
+    admin_err = _require_admin()
+    if admin_err is not None:
+        return admin_err
+
+    body = request.get_json(silent=True) or {}
+    name = body.get('name')
+    body_part_id = _int_or_none(body.get('body_part_id'))
+    category_id = _int_or_none(body.get('category_id'))
+
+    if not isinstance(name, str) or not name.strip():
+        return jsonify({'error': 'name is required'}), 400
+    if body_part_id is None:
+        return jsonify({'error': 'body_part_id is required'}), 400
+    if category_id is None:
+        return jsonify({'error': 'category_id is required'}), 400
+    if db.session.query(BodyParts.body_part_id).filter(BodyParts.body_part_id == body_part_id).first() is None:
+        return jsonify({'error': 'Invalid body_part_id'}), 400
+    if db.session.query(ExerciseCategories.category_id).filter(ExerciseCategories.category_id == category_id).first() is None:
+        return jsonify({'error': 'Invalid category_id'}), 400
+
+    e = Exercises()
+    e.name = name.strip()
+    e.youtube_url = body.get('youtube_url')
+    e.body_part_id = body_part_id
+    e.category_id = category_id
+    db.session.add(e)
+    db.session.commit()
+    return jsonify({'exercise_id': e.exercise_id}), 201
+
+
+@workouts_blueprint.route('/exercises/<int:exercise_id>', methods=['PUT'])
+@require_auth
+def update_exercise(exercise_id):
+    """
+    Update exercise
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: exercise_id
+          in: path
+          required: true
+          type: integer
+          description: Exercise id to update.
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Updated display name for the exercise.
+                youtube_url:
+                    type: string
+                    description: Updated optional tutorial/reference video URL.
+                body_part_id:
+                    type: integer
+                    description: Updated body part id from GET /body-parts.
+                category_id:
+                    type: integer
+                    description: Updated category id from GET /exercise-categories.
+    responses:
+        200:
+            description: Exercise updated
+        400:
+            description: Invalid parameters
+        401:
+            description: Unauthorized
+        404:
+            description: Exercise not found
+    """
+    admin_err = _require_admin()
+    if admin_err is not None:
+        return admin_err
+
+    e = db.session.query(Exercises).filter(Exercises.exercise_id == exercise_id).first()
+    if e is None:
+        return jsonify({'error': 'Exercise not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    if 'name' in body:
+        name = body.get('name')
+        if not isinstance(name, str) or not name.strip():
+            return jsonify({'error': 'name cannot be empty'}), 400
+        e.name = name.strip()
+    if 'youtube_url' in body:
+        e.youtube_url = body.get('youtube_url')
+    if 'body_part_id' in body:
+        body_part_id = _int_or_none(body.get('body_part_id'))
+        if body_part_id is None:
+            return jsonify({'error': 'Invalid body_part_id'}), 400
+        if db.session.query(BodyParts.body_part_id).filter(BodyParts.body_part_id == body_part_id).first() is None:
+            return jsonify({'error': 'Invalid body_part_id'}), 400
+        e.body_part_id = body_part_id
+    if 'category_id' in body:
+        category_id = _int_or_none(body.get('category_id'))
+        if category_id is None:
+            return jsonify({'error': 'Invalid category_id'}), 400
+        if db.session.query(ExerciseCategories.category_id).filter(ExerciseCategories.category_id == category_id).first() is None:
+            return jsonify({'error': 'Invalid category_id'}), 400
+        e.category_id = category_id
+
+    db.session.commit()
+    return jsonify({'message': 'Exercise updated'}), 200
+
+
+@workouts_blueprint.route('/exercises/<int:exercise_id>', methods=['DELETE'])
+@require_auth
+def delete_exercise(exercise_id):
+    """
+    Delete exercise
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: exercise_id
+          in: path
+          required: true
+          type: integer
+          description: Exercise id to delete.
+    responses:
+        200:
+            description: Exercise deleted
+        401:
+            description: Unauthorized
+        404:
+            description: Exercise not found
+    """
+    admin_err = _require_admin()
+    if admin_err is not None:
+        return admin_err
+
+    e = db.session.query(Exercises).filter(Exercises.exercise_id == exercise_id).first()
+    if e is None:
+        return jsonify({'error': 'Exercise not found'}), 404
+
+    db.session.delete(e)
+    db.session.commit()
+    return jsonify({'message': 'Exercise deleted'}), 200
 
 
 # --- Workout plans (templates) ---
