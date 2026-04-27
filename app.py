@@ -17,7 +17,7 @@ from models import db, ExerciseCategories
 
 from endpoints.client import client_blueprint
 from endpoints.coach import coach_blueprint
-from endpoints.message_history import message_blueprint
+from endpoints.message import message_blueprint
 from endpoints.nutrition import nutrition_blueprint
 from endpoints.usda_proxy import usda_proxy_blueprint
 from endpoints.users import users_blueprint

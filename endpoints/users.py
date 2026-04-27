@@ -6,11 +6,22 @@ from models import ClientGoals, CoachSurveys, Users, db
 from auth.authentication import require_auth
 from flask import Blueprint, jsonify, request, g
 
+from auth.util import can_access_client_endpoint  # add import
+
 users_blueprint = Blueprint('users_blueprint', __name__)
 
 _PRIMARY_GOALS_BINARY_CHARS = {'0', '1'}
 _COACH_QUALIFICATIONS_MAX_LEN = 1000
 
+
+
+def _ensure_self_or_coached_client(user_id_str):
+    uid = _parse_uuid(user_id_str)
+    if uid is None:
+        return None, (jsonify({'error': 'Invalid user id'}), 400)
+    if not can_access_client_endpoint(g.user, uid, g.clients_ids):
+        return None, (jsonify({'error': 'You are not authorized to access this resource'}), 403)
+    return uid, None
 
 def _coerce_bool(value):
     if isinstance(value, bool):
@@ -250,9 +261,6 @@ def submit_coach_survey():
                     type: string
                 qualifications:
                     type: string
-                certifications:
-                    type: string
-                    required: false
                 coach_cost:
                     type: integer
     responses:
@@ -299,8 +307,6 @@ def submit_coach_survey():
     if q_err is not None:
         return q_err, 400
 
-    certifications = body.get('certifications')
-
     coach_cost = body.get('coach_cost')
     if coach_cost is not None:
         try:
@@ -314,7 +320,6 @@ def submit_coach_survey():
     row.user_id = g.user.user_id
     row.specialization = specialization
     row.qualifications = qualifications
-    row.certifications = certifications
     row.last_update = _now_naive_utc()
     row.is_client = True
     if coach_cost is not None:
@@ -356,9 +361,6 @@ def patch_coach_survey():
                     type: string
                 qualifications:
                     type: string
-                certifications:
-                    type: string
-                    required: false
                 coach_cost:
                     type: integer
     responses:
@@ -419,11 +421,6 @@ def patch_coach_survey():
             return q_err, 400
         survey.qualifications = qualifications
 
-    if 'certifications' in body:
-        certifications = body.get('certifications')
-        survey.certifications = certifications
-
-
     if 'coach_cost' in body:
         coach_cost = body['coach_cost']
         if coach_cost is None:
@@ -446,7 +443,6 @@ def patch_coach_survey():
         'user_id': str(survey.user_id),
         'specialization': survey.specialization,
         'qualifications': survey.qualifications,
-        'certifications': survey.certifications,
         'coach_cost': g.user.coach_cost,
         'date_created': survey.date_created.isoformat() if survey.date_created else None,
         'last_update': survey.last_update.isoformat() if survey.last_update else None,
@@ -524,11 +520,12 @@ def get_user_profile(user_id):
         409:
             description: User has already submitted a coach survey
         """
-    _, err = _ensure_self(user_id)
+    target_uid, err = _ensure_self(user_id)
     if err:
         return err
-
-    u = g.user
+    u = db.session.query(Users).filter(Users.user_id == target_uid).first()
+    if u is None:
+        return jsonify({'error': 'User not found'}), 404
     payload = {
         'user_id': str(u.user_id),
         'first_name': u.first_name,
