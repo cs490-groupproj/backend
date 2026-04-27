@@ -221,6 +221,19 @@ def _is_coach_for_client(client_id):
     return bool(getattr(g.user, 'is_coach', False)) and client_id in g.clients_ids
 
 
+def _get_active_plan_assignment_for_user(plan_id: int, user_id):
+    return (
+        db.session.query(WorkoutPlanClients)
+        .filter(
+            WorkoutPlanClients.workout_plan_id == plan_id,
+            WorkoutPlanClients.client_id == user_id,
+            WorkoutPlanClients.unassigned_at.is_(None),
+        )
+        .order_by(WorkoutPlanClients.assignment_id.desc())
+        .first()
+    )
+
+
 def _get_workout_for_user(workout_id: int, user_id):
     return (
         db.session.query(Workouts)
@@ -538,6 +551,112 @@ def list_workout_plans():
     ]), 200
 
 
+@workouts_blueprint.route('/workout-plans/available', methods=['GET'])
+@require_auth
+def list_available_workout_plans():
+    """
+    List available workout plans for a user (created + assigned)
+    ---
+    tags:
+        - Workouts
+    parameters:
+        - name: user_id
+          in: query
+          required: false
+          type: string
+    responses:
+        200:
+            description: List available workout plans
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        workout_plan_id:
+                            type: integer
+                        title:
+                            type: string
+                        created_by:
+                            type: string
+                        duration_min:
+                            type: integer
+                        is_created_by_user:
+                            type: boolean
+                        is_assigned_to_user:
+                            type: boolean
+                        assignment_id:
+                            type: integer
+                        assigned_at:
+                            type: string
+        400:
+            description: Invalid parameters
+        403:
+            description: Unauthorized
+    """
+    target_user_raw = request.args.get('user_id')
+    if target_user_raw:
+        target_user_id = _parse_uuid(target_user_raw)
+        if target_user_id is None:
+            return jsonify({'error': 'user_id must be a valid UUID'}), 400
+        if not _can_access_user_id(target_user_id):
+            return jsonify({'error': 'You are not authorized to view workout plans for this user'}), 403
+    else:
+        target_user_id = g.user.user_id
+
+    response_by_plan_id = {}
+
+    created_rows = (
+        db.session.query(WorkoutPlans)
+        .filter(WorkoutPlans.created_by == target_user_id)
+        .order_by(WorkoutPlans.title.asc())
+        .all()
+    )
+    for plan in created_rows:
+        response_by_plan_id[plan.workout_plan_id] = {
+            'workout_plan_id': plan.workout_plan_id,
+            'title': plan.title,
+            'created_by': str(plan.created_by) if plan.created_by else None,
+            'duration_min': plan.duration_min,
+            'is_created_by_user': True,
+            'is_assigned_to_user': False,
+            'assignment_id': None,
+            'assigned_at': None,
+        }
+
+    assigned_rows = (
+        db.session.query(WorkoutPlanClients, WorkoutPlans)
+        .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanClients.workout_plan_id)
+        .filter(
+            WorkoutPlanClients.client_id == target_user_id,
+            WorkoutPlanClients.unassigned_at.is_(None),
+        )
+        .order_by(WorkoutPlanClients.assigned_at.desc(), WorkoutPlanClients.assignment_id.desc())
+        .all()
+    )
+    for assignment, plan in assigned_rows:
+        existing = response_by_plan_id.get(plan.workout_plan_id)
+        if existing is None:
+            response_by_plan_id[plan.workout_plan_id] = {
+                'workout_plan_id': plan.workout_plan_id,
+                'title': plan.title,
+                'created_by': str(plan.created_by) if plan.created_by else None,
+                'duration_min': plan.duration_min,
+                'is_created_by_user': plan.created_by == target_user_id,
+                'is_assigned_to_user': True,
+                'assignment_id': assignment.assignment_id,
+                'assigned_at': _serialize_datetime(assignment.assigned_at),
+            }
+        else:
+            existing['is_assigned_to_user'] = True
+            if existing['assignment_id'] is None:
+                existing['assignment_id'] = assignment.assignment_id
+                existing['assigned_at'] = _serialize_datetime(assignment.assigned_at)
+
+    out = list(response_by_plan_id.values())
+    out.sort(key=lambda x: (x['title'] or '').lower())
+    return jsonify(out), 200
+
+
 @workouts_blueprint.route('/workout-plans/<int:plan_id>', methods=['GET'])
 @require_auth
 def get_workout_plan(plan_id):
@@ -626,9 +745,27 @@ def get_workout_plan(plan_id):
     )
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
-    access_err = _ensure_plan_access(plan)
-    if access_err is not None:
-        return access_err
+
+    assignment = _get_active_plan_assignment_for_user(plan_id, g.user.user_id)
+    has_owner_access = plan.created_by is not None and _can_access_user_id(plan.created_by)
+    has_assignment_access = assignment is not None
+    if not has_owner_access and not has_assignment_access:
+        return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
+
+    if has_assignment_access:
+        assignment_rows = (
+            db.session.query(WorkoutPlanClientDays)
+            .filter(WorkoutPlanClientDays.assignment_id == assignment.assignment_id)
+            .order_by(WorkoutPlanClientDays.id.asc())
+            .all()
+        )
+        if assignment_rows:
+            assignments_payload = [_plan_client_day_public(day) for day in assignment_rows]
+        else:
+            assignments_payload = [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)]
+    else:
+        assignments_payload = [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)]
+
     exercises = sorted(plan.workout_plan_exercises, key=lambda x: (x.position, x.workout_plan_exercise_id))
     return jsonify({
         'workout_plan_id': plan.workout_plan_id,
@@ -637,7 +774,7 @@ def get_workout_plan(plan_id):
         'description': plan.description,
         'created_by': str(plan.created_by) if plan.created_by else None,
         'duration_min': plan.duration_min,
-        'assignments': [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)],
+        'assignments': assignments_payload,
         'exercises': [_plan_exercise_public(pe) for pe in exercises],
     }), 200
 

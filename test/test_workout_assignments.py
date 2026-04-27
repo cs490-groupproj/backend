@@ -176,3 +176,58 @@ def test_weekly_schedule_includes_client_assignments_and_get_workouts_stays_real
     workouts = _get_as(client, assigned_client, f'/workouts?user_id={assigned_client.user_id}')
     assert workouts.status_code == 200
     assert workouts.get_json() == []
+
+
+def test_available_workout_plans_unions_created_and_assigned(client, session):
+    coach = _create_user(session, 'coach-available', is_coach=True, is_client=False)
+    target_client = _create_user(session, 'client-available', is_coach=False, is_client=True)
+
+    billing = ClientBilling()
+    billing.client_id = target_client.user_id
+    billing.card_number = '4111111111111111'
+    billing.card_exp_month = 1
+    billing.card_exp_year = 2030
+    billing.card_security_number = 111
+    billing.card_name = 'Client Available'
+    billing.card_address_1 = '123 St'
+    billing.card_city = 'City'
+    billing.card_postcode = '00000'
+    billing.renew_day_number = 1
+    session.add(billing)
+    session.flush()
+
+    link = ClientCoaches()
+    link.client_id = target_client.user_id
+    link.coach_id = coach.user_id
+    link.client_billing_id = billing.client_billing_id
+    session.add(link)
+
+    client_created_plan = WorkoutPlans()
+    client_created_plan.title = 'Client Created Plan'
+    client_created_plan.created_by = target_client.user_id
+    session.add(client_created_plan)
+    session.flush()
+
+    coach_plan = WorkoutPlans()
+    coach_plan.title = 'Coach Assigned Plan'
+    coach_plan.created_by = coach.user_id
+    session.add(coach_plan)
+    session.flush()
+
+    assignment = WorkoutPlanClients()
+    assignment.workout_plan_id = coach_plan.workout_plan_id
+    assignment.client_id = target_client.user_id
+    assignment.assigned_by = coach.user_id
+    session.add(assignment)
+    session.commit()
+
+    available = _get_as(client, target_client, '/workout-plans/available')
+    body = available.get_json()
+    assert available.status_code == 200
+    assert len(body) == 2
+
+    by_title = {row['title']: row for row in body}
+    assert by_title['Client Created Plan']['is_created_by_user'] is True
+    assert by_title['Client Created Plan']['is_assigned_to_user'] is False
+    assert by_title['Coach Assigned Plan']['is_created_by_user'] is False
+    assert by_title['Coach Assigned Plan']['is_assigned_to_user'] is True
