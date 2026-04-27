@@ -420,6 +420,8 @@ def make_coach():
     user = db.session.query(Users).filter(Users.user_id == user_id).first()
     user.is_coach = True
 
+    db.session.query(CoachRequests).filter(CoachRequests.coach_id == user_id).delete()
+
     db.session.commit()
 
     return jsonify({
