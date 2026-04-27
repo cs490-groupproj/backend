@@ -154,6 +154,16 @@ class Users(db.Model):
     messages_message_sender = db.relationship('Messages', foreign_keys='[Messages.message_sender]', back_populates='users_')
     notifications = db.relationship('Notifications', back_populates='users')
     workout_plans = db.relationship('WorkoutPlans', back_populates='users')
+    workout_plan_assignments_client = db.relationship(
+        'WorkoutPlanClients',
+        foreign_keys='[WorkoutPlanClients.client_id]',
+        back_populates='client',
+    )
+    workout_plan_assignments_assigned_by = db.relationship(
+        'WorkoutPlanClients',
+        foreign_keys='[WorkoutPlanClients.assigned_by]',
+        back_populates='assigned_by_user',
+    )
     workouts = db.relationship('Workouts', back_populates='user')
 
 
@@ -391,8 +401,80 @@ class WorkoutPlans(db.Model):
         back_populates='workout_plan',
         passive_deletes=True,
     )
+    client_assignments = db.relationship(
+        'WorkoutPlanClients',
+        back_populates='workout_plan',
+        passive_deletes=True,
+    )
     workouts = db.relationship('Workouts', back_populates='workout_plan')
     workout_plan_days = db.relationship('WorkoutPlanDays', back_populates='workout_plan')
+
+
+class WorkoutPlanClients(db.Model):
+    __tablename__ = 'workout_plan_clients'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['workout_plan_id'],
+            ['workout_plans.workout_plan_id'],
+            ondelete='CASCADE',
+            name='FK_workout_plan_clients_workout_plan',
+        ),
+        ForeignKeyConstraint(
+            ['client_id'],
+            ['users.user_id'],
+            name='FK_workout_plan_clients_client',
+        ),
+        ForeignKeyConstraint(
+            ['assigned_by'],
+            ['users.user_id'],
+            name='FK_workout_plan_clients_assigned_by',
+        ),
+        PrimaryKeyConstraint('assignment_id', name='PK_workout_plan_clients'),
+    )
+
+    assignment_id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    workout_plan_id = db.Column(Integer, nullable=False)
+    client_id = db.Column(Uuid, nullable=False)
+    assigned_by = db.Column(Uuid, nullable=False)
+    assigned_at = db.Column(DateTime, nullable=False, server_default=text('(getdate())'))
+    unassigned_at = db.Column(DateTime)
+
+    workout_plan = db.relationship('WorkoutPlans', back_populates='client_assignments')
+    client = db.relationship(
+        'Users',
+        foreign_keys=[client_id],
+        back_populates='workout_plan_assignments_client',
+    )
+    assigned_by_user = db.relationship(
+        'Users',
+        foreign_keys=[assigned_by],
+        back_populates='workout_plan_assignments_assigned_by',
+    )
+    schedule_days = db.relationship(
+        'WorkoutPlanClientDays',
+        back_populates='assignment',
+        passive_deletes=True,
+    )
+
+
+class WorkoutPlanClientDays(db.Model):
+    __tablename__ = 'workout_plan_client_days'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['assignment_id'],
+            ['workout_plan_clients.assignment_id'],
+            ondelete='CASCADE',
+            name='FK_workout_plan_client_days_assignment',
+        ),
+        PrimaryKeyConstraint('id', name='PK_workout_plan_client_days'),
+    )
+
+    id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    assignment_id = db.Column(Integer, nullable=False)
+    weekday = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    schedule_time = db.Column(Time, nullable=False)
+
+    assignment = db.relationship('WorkoutPlanClients', back_populates='schedule_days')
 
 
 class WorkoutPlanExercises(db.Model):
