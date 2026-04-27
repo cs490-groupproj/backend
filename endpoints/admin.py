@@ -361,7 +361,7 @@ def applications():
     if limit is None or offset is None:
         return jsonify({'message': 'limit and offset are required parameters'}), 400
 
-    query = db.session.query(CoachSurveys).order_by(CoachSurveys.date_created.desc())
+    query = db.session.query(CoachSurveys).join(Users).filter(Users.is_coach == False).order_by(CoachSurveys.date_created.desc())
     count = query.count()
     surveys = query.limit(limit).offset(offset).all()
 
@@ -419,8 +419,6 @@ def make_coach():
 
     user = db.session.query(Users).filter(Users.user_id == user_id).first()
     user.is_coach = True
-
-    db.session.query(CoachRequests).filter(CoachRequests.coach_id == user_id).delete()
 
     db.session.commit()
 
