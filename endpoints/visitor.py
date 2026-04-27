@@ -1,7 +1,7 @@
 from uuid import UUID
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy import or_, func
-from models import CoachReviews, Users, Exercises, CoachSurveys
+from models import CoachReviews, Users, Exercises, CoachSurveys, BodyParts, ExerciseCategories
 from sqlalchemy.orm import joinedload
 from app import db
 
@@ -87,3 +87,103 @@ def search():
         'coaches': [_build_coach_json(c) for c in coaches]
     })
     
+
+@visitor_blueprint.route('/exercise-categories', methods=['GET'])
+def list_exercise_categories():
+    """
+    List exercise categories
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get exercise categories
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        category_id:
+                            type: integer
+                        name:
+                            type: string
+    """
+    rows = db.session.query(ExerciseCategories).order_by(ExerciseCategories.name).all()
+    return jsonify([{'category_id': r.category_id, 'name': r.name} for r in rows]), 200
+
+
+@visitor_blueprint.route('/body-parts', methods=['GET'])
+def list_body_parts():
+    """
+    List body parts
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Get body parts
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        body_part_id:
+                            type: integer
+                        name:
+                            type: string
+
+    """
+    rows = db.session.query(BodyParts).order_by(BodyParts.name).all()
+    return jsonify([{'body_part_id': r.body_part_id, 'name': r.name} for r in rows]), 200
+
+    
+@visitor_blueprint.route('/exercises', methods=['GET'])
+def list_exercises():
+    """
+    List exercises
+    ---
+    tags:
+        - Viewers
+    responses:
+        200:
+            description: Get exercise categories
+            schema:
+                type: array
+                items:
+                    type: object
+                    properties:
+                        exercise_id:
+                            type: integer
+                        name:
+                            type: string
+                        youtube_url:
+                            type: string
+                        body_part_id:
+                            type: integer
+                        category_id:
+                            type: integer
+                        body_part:
+                            type: string
+                        category:
+                            type: string
+
+    """
+    rows = (
+        db.session.query(Exercises)
+        .options(joinedload(Exercises.body_part), joinedload(Exercises.category))
+        .order_by(Exercises.name)
+        .all()
+    )
+    out = []
+    for e in rows:
+        out.append({
+            'exercise_id': e.exercise_id,
+            'name': e.name,
+            'youtube_url': e.youtube_url,
+            'body_part_id': e.body_part_id,
+            'category_id': e.category_id,
+            'body_part': e.body_part.name if e.body_part else None,
+            'category': e.category.name if e.category else None,
+        })
+    print(f"[VIEWERS DEBUG] GET /exercises response: {out}")
+    return jsonify(out), 200
