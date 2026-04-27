@@ -231,3 +231,57 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     assert by_title['Client Created Plan']['is_assigned_to_user'] is False
     assert by_title['Coach Assigned Plan']['is_created_by_user'] is False
     assert by_title['Coach Assigned Plan']['is_assigned_to_user'] is True
+
+
+def test_assigned_client_can_get_workout_plan_details(client, session):
+    coach = _create_user(session, 'coach-details', is_coach=True, is_client=False)
+    assigned_client = _create_user(session, 'client-details', is_coach=False, is_client=True)
+
+    billing = ClientBilling()
+    billing.client_id = assigned_client.user_id
+    billing.card_number = '4111111111111111'
+    billing.card_exp_month = 1
+    billing.card_exp_year = 2030
+    billing.card_security_number = 111
+    billing.card_name = 'Client Details'
+    billing.card_address_1 = '123 St'
+    billing.card_city = 'City'
+    billing.card_postcode = '00000'
+    billing.renew_day_number = 1
+    session.add(billing)
+    session.flush()
+
+    link = ClientCoaches()
+    link.client_id = assigned_client.user_id
+    link.coach_id = coach.user_id
+    link.client_billing_id = billing.client_billing_id
+    session.add(link)
+
+    plan = WorkoutPlans()
+    plan.title = 'Assigned Detail Plan'
+    plan.created_by = coach.user_id
+    session.add(plan)
+    session.flush()
+
+    assignment = WorkoutPlanClients()
+    assignment.workout_plan_id = plan.workout_plan_id
+    assignment.client_id = assigned_client.user_id
+    assignment.assigned_by = coach.user_id
+    session.add(assignment)
+    session.flush()
+
+    assignment_day = WorkoutPlanClientDays()
+    assignment_day.assignment_id = assignment.assignment_id
+    assignment_day.weekday = 'Tuesday'
+    assignment_day.schedule_time = time(7, 30, 0)
+    session.add(assignment_day)
+    session.commit()
+
+    response = _get_as(client, assigned_client, f'/workout-plans/{plan.workout_plan_id}')
+    body = response.get_json()
+
+    assert response.status_code == 200
+    assert body['workout_plan_id'] == plan.workout_plan_id
+    assert len(body['assignments']) == 1
+    assert body['assignments'][0]['assignment_id'] == assignment.assignment_id
+    assert body['assignments'][0]['weekday'] == 'Tuesday'
