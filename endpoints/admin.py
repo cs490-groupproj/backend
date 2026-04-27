@@ -175,8 +175,9 @@ def ban_user():
     except:
         return jsonify({'message': 'User is banned but Firebase has not been deactivated'}), 502
 
-    reports = db.session.query(CoachReports).filter(CoachReports.coach_id == user_id).all()
-    db.session.delete(reports)
+    db.session.query(CoachReports).filter(CoachReports.coach_id == user_id).delete()
+
+    db.session.commit()
 
     return jsonify({
         'message': 'User banned'
@@ -294,7 +295,11 @@ def reject_report():
 
     report = db.session.query(CoachReports).filter(CoachReports.coach_report_id == report_id).first()
 
+    if report is None:
+        return jsonify({'message': 'Coach report not found'}), 404
+
     db.session.delete(report)
+    db.session.commit()
 
     return jsonify({
         'message': 'Rejected report'
@@ -415,6 +420,8 @@ def make_coach():
     user = db.session.query(Users).filter(Users.user_id == user_id).first()
     user.is_coach = True
 
+    db.session.commit()
+
     return jsonify({
         'message': 'Lo! This worthy soul hath been raised by sword and sworn into the ancient and honourable company of coaches'
     }), 200
@@ -462,5 +469,6 @@ def reject_application():
         return jsonify({'message': 'Survey not found'}), 404
 
     db.session.delete(survey)
+    db.session.commit()
 
     return jsonify({'message': 'Coach rejected'}), 200

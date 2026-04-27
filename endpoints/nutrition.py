@@ -518,7 +518,7 @@ def today():
     if timezone_string is None:
         return jsonify({'error': 'timezone_string parameter must be included in URL'}), 400
 
-    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 1)
+    tz_start, tz_end = _get_past_utc_bounds(timezone_string, 0)
 
     if tz_start is None or tz_end is None:
         return jsonify({'error': 'timezone_string parameter is not valid'}), 400

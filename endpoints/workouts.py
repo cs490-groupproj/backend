@@ -26,6 +26,24 @@ from models import (
 workouts_blueprint = Blueprint('workouts_blueprint', __name__)
 
 
+
+def _require_self_or_coached_client(target_user_id):
+    if not can_access_client_endpoint(g.user, target_user_id, g.clients_ids):
+        return jsonify({'error': 'You are not authorized to access this content'}), 403
+    return None
+
+def _require_authorized_user_id():
+    uid_raw = request.args.get('user_id')
+    uid = _parse_uuid(uid_raw)
+    if uid is None:
+        return None, (jsonify({'error': 'Query parameter user_id (UUID) is required'}), 400)
+
+    auth_err = _require_self_or_coached_client(uid)
+    if auth_err is not None:
+        return None, auth_err
+
+    return uid, None
+
 def _parse_uuid(value):
     try:
         return UUID(str(value))
@@ -2309,6 +2327,9 @@ def get_user_schedule():
 
     return jsonify({'my_schedule': schedule}), 200
 
+
+
+    
 @workouts_blueprint.route('/workouts/<int:workout_id>', methods=['GET'])
 @require_auth
 def get_workout(workout_id):
