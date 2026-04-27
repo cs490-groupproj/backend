@@ -41,6 +41,12 @@ def _get_as(client, user, path):
         return client.get(path, headers={'Authorization': 'Bearer token'})
 
 
+def _delete_as(client, user, path):
+    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
+        mock_fb.return_value = {'uid': user.firebase_user_id}
+        return client.delete(path, headers={'Authorization': 'Bearer token'})
+
+
 def test_coach_assignment_uses_workout_plan_clients_table(client, session):
     coach = _create_user(session, 'coach-user', is_coach=True, is_client=False)
     assigned_client = _create_user(session, 'client-user', is_coach=False, is_client=True)
@@ -285,3 +291,53 @@ def test_assigned_client_can_get_workout_plan_details(client, session):
     assert len(body['assignments']) == 1
     assert body['assignments'][0]['assignment_id'] == assignment.assignment_id
     assert body['assignments'][0]['weekday'] == 'Tuesday'
+
+
+def test_delete_plan_assignment_supports_client_assignment_days(client, session):
+    coach = _create_user(session, 'coach-delete-clientday', is_coach=True, is_client=False)
+    assigned_client = _create_user(session, 'client-delete-clientday', is_coach=False, is_client=True)
+
+    billing = ClientBilling()
+    billing.client_id = assigned_client.user_id
+    billing.card_number = '4111111111111111'
+    billing.card_exp_month = 1
+    billing.card_exp_year = 2030
+    billing.card_security_number = 111
+    billing.card_name = 'Client Delete'
+    billing.card_address_1 = '123 St'
+    billing.card_city = 'City'
+    billing.card_postcode = '00000'
+    billing.renew_day_number = 1
+    session.add(billing)
+    session.flush()
+
+    link = ClientCoaches()
+    link.client_id = assigned_client.user_id
+    link.coach_id = coach.user_id
+    link.client_billing_id = billing.client_billing_id
+    session.add(link)
+
+    plan = WorkoutPlans()
+    plan.title = 'Delete Assigned Day Plan'
+    plan.created_by = coach.user_id
+    session.add(plan)
+    session.flush()
+
+    assignment = WorkoutPlanClients()
+    assignment.workout_plan_id = plan.workout_plan_id
+    assignment.client_id = assigned_client.user_id
+    assignment.assigned_by = coach.user_id
+    session.add(assignment)
+    session.flush()
+
+    assignment_day = WorkoutPlanClientDays()
+    assignment_day.assignment_id = assignment.assignment_id
+    assignment_day.weekday = 'Thursday'
+    assignment_day.schedule_time = time(9, 0, 0)
+    session.add(assignment_day)
+    session.commit()
+
+    response = _delete_as(client, assigned_client, f'/workout-plan-assignments/{assignment_day.id}')
+    assert response.status_code == 200
+    remaining = session.query(WorkoutPlanClientDays).filter(WorkoutPlanClientDays.id == assignment_day.id).first()
+    assert remaining is None

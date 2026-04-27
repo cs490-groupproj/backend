@@ -1293,16 +1293,32 @@ def delete_plan_assignment(assignment_id):
             description: Workout plan not found
 
     """
-    assignment = (
+    plan_day_assignment = (
         db.session.query(WorkoutPlanDays, WorkoutPlans.created_by)
         .join(WorkoutPlans, WorkoutPlans.workout_plan_id == WorkoutPlanDays.workout_plan_id)
         .filter(WorkoutPlanDays.id == assignment_id)
         .first()
     )
-    if assignment is None:
+    if plan_day_assignment is not None:
+        assignment_row, plan_owner_id = plan_day_assignment
+        if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+            return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
+
+        db.session.delete(assignment_row)
+        db.session.commit()
+        return jsonify({'message': 'Deleted'}), 200
+
+    client_day_assignment = (
+        db.session.query(WorkoutPlanClientDays, WorkoutPlanClients.client_id)
+        .join(WorkoutPlanClients, WorkoutPlanClients.assignment_id == WorkoutPlanClientDays.assignment_id)
+        .filter(WorkoutPlanClientDays.id == assignment_id, WorkoutPlanClients.unassigned_at.is_(None))
+        .first()
+    )
+    if client_day_assignment is None:
         return jsonify({'error': 'Workout plan assignment not found'}), 404
-    assignment_row, plan_owner_id = assignment
-    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+
+    assignment_row, client_id = client_day_assignment
+    if not _can_access_user_id(client_id):
         return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     db.session.delete(assignment_row)
