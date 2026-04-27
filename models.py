@@ -450,6 +450,31 @@ class WorkoutPlanClients(db.Model):
         foreign_keys=[assigned_by],
         back_populates='workout_plan_assignments_assigned_by',
     )
+    schedule_days = db.relationship(
+        'WorkoutPlanClientDays',
+        back_populates='assignment',
+        passive_deletes=True,
+    )
+
+
+class WorkoutPlanClientDays(db.Model):
+    __tablename__ = 'workout_plan_client_days'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['assignment_id'],
+            ['workout_plan_clients.assignment_id'],
+            ondelete='CASCADE',
+            name='FK_workout_plan_client_days_assignment',
+        ),
+        PrimaryKeyConstraint('id', name='PK_workout_plan_client_days'),
+    )
+
+    id = db.Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    assignment_id = db.Column(Integer, nullable=False)
+    weekday = db.Column(String(10, 'SQL_Latin1_General_CP1_CI_AS'), nullable=False)
+    schedule_time = db.Column(Time, nullable=False)
+
+    assignment = db.relationship('WorkoutPlanClients', back_populates='schedule_days')
 
 
 class WorkoutPlanExercises(db.Model):
