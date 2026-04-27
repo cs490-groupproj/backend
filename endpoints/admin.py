@@ -436,7 +436,7 @@ def reject_application():
     ---
     tags:
         - Admin
-    paramters:
+    parameters:
         - name: body
           in: body
           required: true
