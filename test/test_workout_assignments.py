@@ -1,55 +1,11 @@
-import uuid
 from datetime import time
-from unittest.mock import patch
+from util import create_user, post_as, get_as, delete_as
 
-from models import (
-    ClientBilling,
-    ClientCoaches,
-    Users,
-    WorkoutPlanClientDays,
-    WorkoutPlanClients,
-    WorkoutPlanDays,
-    WorkoutPlans,
-)
-
-
-def _create_user(session, firebase_user_id, is_coach=False, is_client=True, is_admin=False):
-    user = Users()
-    user.user_id = uuid.uuid4()
-    user.firebase_user_id = firebase_user_id
-    user.first_name = firebase_user_id
-    user.last_name = 'User'
-    user.email = f'{firebase_user_id}@email.com'
-    user.is_active = True
-    user.is_coach = is_coach
-    user.is_client = is_client
-    user.is_admin = is_admin
-    session.add(user)
-    session.flush()
-    return user
-
-
-def _post_as(client, user, path, payload):
-    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
-        mock_fb.return_value = {'uid': user.firebase_user_id}
-        return client.post(path, json=payload, headers={'Authorization': 'Bearer token'})
-
-
-def _get_as(client, user, path):
-    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
-        mock_fb.return_value = {'uid': user.firebase_user_id}
-        return client.get(path, headers={'Authorization': 'Bearer token'})
-
-
-def _delete_as(client, user, path):
-    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
-        mock_fb.return_value = {'uid': user.firebase_user_id}
-        return client.delete(path, headers={'Authorization': 'Bearer token'})
-
+from models import *
 
 def test_coach_assignment_uses_workout_plan_clients_table(client, session):
-    coach = _create_user(session, 'coach-user', is_coach=True, is_client=False)
-    assigned_client = _create_user(session, 'client-user', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-user', is_coach=True, is_client=False)
+    assigned_client = create_user(session, 'client-user', is_coach=False, is_client=True)
 
     billing = ClientBilling()
     billing.client_id = assigned_client.user_id
@@ -81,7 +37,7 @@ def test_coach_assignment_uses_workout_plan_clients_table(client, session):
         'client_id': str(assigned_client.user_id),
         'assignments': [{'weekday': 'Wednesday', 'schedule_time': '09:00:00'}],
     }
-    response = _post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
+    response = post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
     body = response.get_json()
 
     assert response.status_code == 201
@@ -104,8 +60,8 @@ def test_coach_assignment_uses_workout_plan_clients_table(client, session):
 
 
 def test_non_roster_assignment_falls_back_to_plan_days(client, session):
-    coach = _create_user(session, 'coach-fallback', is_coach=True, is_client=False)
-    other_user = _create_user(session, 'other-user', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-fallback', is_coach=True, is_client=False)
+    other_user = create_user(session, 'other-user', is_coach=False, is_client=True)
 
     plan = WorkoutPlans()
     plan.title = 'Fallback Plan'
@@ -117,7 +73,7 @@ def test_non_roster_assignment_falls_back_to_plan_days(client, session):
         'client_id': str(other_user.user_id),
         'assignments': [{'weekday': 'Friday', 'schedule_time': '07:30:00'}],
     }
-    response = _post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
+    response = post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
     body = response.get_json()
     assert response.status_code == 201
     assert body['workout_plan_id'] == plan.workout_plan_id
@@ -129,8 +85,8 @@ def test_non_roster_assignment_falls_back_to_plan_days(client, session):
 
 
 def test_weekly_schedule_includes_client_assignments_and_get_workouts_stays_real_only(client, session):
-    coach = _create_user(session, 'coach-weekly', is_coach=True, is_client=False)
-    assigned_client = _create_user(session, 'client-weekly', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-weekly', is_coach=True, is_client=False)
+    assigned_client = create_user(session, 'client-weekly', is_coach=False, is_client=True)
 
     billing = ClientBilling()
     billing.client_id = assigned_client.user_id
@@ -172,21 +128,21 @@ def test_weekly_schedule_includes_client_assignments_and_get_workouts_stays_real
     session.add(day)
     session.commit()
 
-    weekly = _get_as(client, assigned_client, f'/workouts/weekly-assignments?user_id={assigned_client.user_id}')
+    weekly = get_as(client, assigned_client, f'/workouts/weekly-assignments?user_id={assigned_client.user_id}')
     weekly_body = weekly.get_json()
     assert weekly.status_code == 200
     assert len(weekly_body) == 1
     assert weekly_body[0]['workout_plan_id'] == plan.workout_plan_id
     assert weekly_body[0]['assignment_id'] == assignment.assignment_id
 
-    workouts = _get_as(client, assigned_client, f'/workouts?user_id={assigned_client.user_id}')
+    workouts = get_as(client, assigned_client, f'/workouts?user_id={assigned_client.user_id}')
     assert workouts.status_code == 200
     assert workouts.get_json() == []
 
 
 def test_available_workout_plans_unions_created_and_assigned(client, session):
-    coach = _create_user(session, 'coach-available', is_coach=True, is_client=False)
-    target_client = _create_user(session, 'client-available', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-available', is_coach=True, is_client=False)
+    target_client = create_user(session, 'client-available', is_coach=False, is_client=True)
 
     billing = ClientBilling()
     billing.client_id = target_client.user_id
@@ -227,7 +183,7 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     session.add(assignment)
     session.commit()
 
-    available = _get_as(client, target_client, '/workout-plans/available')
+    available = get_as(client, target_client, '/workout-plans/available')
     body = available.get_json()
     assert available.status_code == 200
     assert len(body) == 2
@@ -240,8 +196,8 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
 
 
 def test_assigned_client_can_get_workout_plan_details(client, session):
-    coach = _create_user(session, 'coach-details', is_coach=True, is_client=False)
-    assigned_client = _create_user(session, 'client-details', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-details', is_coach=True, is_client=False)
+    assigned_client = create_user(session, 'client-details', is_coach=False, is_client=True)
 
     billing = ClientBilling()
     billing.client_id = assigned_client.user_id
@@ -283,7 +239,7 @@ def test_assigned_client_can_get_workout_plan_details(client, session):
     session.add(assignment_day)
     session.commit()
 
-    response = _get_as(client, assigned_client, f'/workout-plans/{plan.workout_plan_id}')
+    response = get_as(client, assigned_client, f'/workout-plans/{plan.workout_plan_id}')
     body = response.get_json()
 
     assert response.status_code == 200
@@ -294,8 +250,8 @@ def test_assigned_client_can_get_workout_plan_details(client, session):
 
 
 def test_delete_plan_assignment_supports_client_assignment_days(client, session):
-    coach = _create_user(session, 'coach-delete-clientday', is_coach=True, is_client=False)
-    assigned_client = _create_user(session, 'client-delete-clientday', is_coach=False, is_client=True)
+    coach = create_user(session, 'coach-delete-clientday', is_coach=True, is_client=False)
+    assigned_client = create_user(session, 'client-delete-clientday', is_coach=False, is_client=True)
 
     billing = ClientBilling()
     billing.client_id = assigned_client.user_id
@@ -337,7 +293,7 @@ def test_delete_plan_assignment_supports_client_assignment_days(client, session)
     session.add(assignment_day)
     session.commit()
 
-    response = _delete_as(client, assigned_client, f'/workout-plan-assignments/{assignment_day.id}')
+    response = delete_as(client, assigned_client, f'/workout-plan-assignments/{assignment_day.id}')
     assert response.status_code == 200
     remaining = session.query(WorkoutPlanClientDays).filter(WorkoutPlanClientDays.id == assignment_day.id).first()
     assert remaining is None
