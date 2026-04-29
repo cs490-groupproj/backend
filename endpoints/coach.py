@@ -92,12 +92,12 @@ def search():
         .group_by(CoachReviews.coach_id) \
         .subquery()
 
-    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
+    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 0)) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
         .join(CoachSurveys) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
-        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
+        .order_by(func.coalesce(avg_ratings.c.avg_rating, 5).desc())
 
 
     if query is not None:
