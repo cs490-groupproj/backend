@@ -143,7 +143,7 @@ def list_exercises():
     List exercises
     ---
     tags:
-        - Viewers
+        - Visitors
     responses:
         200:
             description: Get exercise categories
