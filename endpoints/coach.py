@@ -467,14 +467,13 @@ def remove_client():
     except (ValueError, TypeError):
         return jsonify({'message': 'Client id parameter is invalid'}), 400
 
-    if client_id not in g.user.clients_ids:
+    if client_id not in g.clients_ids:
         return jsonify({'message': 'User does not coach client'}), 400
 
-    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).all()
+    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).first()
     if relationship is None or not relationship:
         return jsonify({'message': 'Relationship does not exist'}), 404
 
-    db.session.delete(relationship.client_billing)
     db.session.delete(relationship)
     db.session.commit()
 
