@@ -181,18 +181,29 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     assignment.client_id = target_client.user_id
     assignment.assigned_by = coach.user_id
     session.add(assignment)
+
+    global_plan = WorkoutPlans()
+    global_plan.title = 'Global Template'
+    global_plan.created_by = None
+    session.add(global_plan)
     session.commit()
 
     available = get_as(client, target_client, '/workout-plans/available')
     body = available.get_json()
     assert available.status_code == 200
-    assert len(body) == 2
+    assert len(body) == 3
 
     by_title = {row['title']: row for row in body}
     assert by_title['Client Created Plan']['is_created_by_user'] is True
     assert by_title['Client Created Plan']['is_assigned_to_user'] is False
+    assert by_title['Client Created Plan']['is_global_template'] is False
     assert by_title['Coach Assigned Plan']['is_created_by_user'] is False
     assert by_title['Coach Assigned Plan']['is_assigned_to_user'] is True
+    assert by_title['Coach Assigned Plan']['is_global_template'] is False
+    assert by_title['Global Template']['created_by'] is None
+    assert by_title['Global Template']['is_global_template'] is True
+    assert by_title['Global Template']['is_created_by_user'] is False
+    assert by_title['Global Template']['is_assigned_to_user'] is False
 
 
 def test_assigned_client_can_get_workout_plan_details(client, session):

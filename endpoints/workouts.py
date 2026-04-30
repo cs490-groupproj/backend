@@ -165,9 +165,32 @@ def _can_access_user_id(user_id):
 
 
 def _ensure_plan_access(plan: WorkoutPlans):
-    if plan.created_by is None or not _can_access_user_id(plan.created_by):
+    """Edit/delete access: plan owner, or admin for global (created_by NULL) templates."""
+    if plan.created_by is None:
+        if can_access_admin_endpoint(g.user):
+            return None
+        return jsonify({'error': 'You are not authorized to modify this workout plan'}), 403
+    if not _can_access_user_id(plan.created_by):
         return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
     return None
+
+
+def _ensure_can_start_workout_from_plan(plan: WorkoutPlans, workout_owner_id):
+    """Start a session from a plan: global template, plan owner, or user has an active assignment."""
+    if plan.created_by is None:
+        return None
+    if _can_access_user_id(plan.created_by):
+        return None
+    if _get_active_plan_assignment_for_user(plan.workout_plan_id, workout_owner_id) is not None:
+        return None
+    return jsonify({'error': 'You are not authorized to use this workout plan'}), 403
+
+
+def _can_edit_plan_created_by(plan_created_by):
+    """Mutate plan content: owner, or admin if global template (created_by is None)."""
+    if plan_created_by is None:
+        return can_access_admin_endpoint(g.user)
+    return _can_access_user_id(plan_created_by)
 
 
 def _ensure_workout_access(workout: Workouts):
@@ -764,7 +787,7 @@ def list_workout_plans():
 @require_auth
 def list_available_workout_plans():
     """
-    List available workout plans for a user (created + assigned)
+    List available workout plans for a user (created + assigned + global templates)
     ---
     tags:
         - Workouts
@@ -792,6 +815,8 @@ def list_available_workout_plans():
                         is_created_by_user:
                             type: boolean
                         is_assigned_to_user:
+                            type: boolean
+                        is_global_template:
                             type: boolean
                         assignment_id:
                             type: integer
@@ -830,6 +855,7 @@ def list_available_workout_plans():
             'is_assigned_to_user': False,
             'assignment_id': None,
             'assigned_at': None,
+            'is_global_template': False,
         }
 
     assigned_rows = (
@@ -843,6 +869,7 @@ def list_available_workout_plans():
         .all()
     )
     for assignment, plan in assigned_rows:
+        is_global = plan.created_by is None
         existing = response_by_plan_id.get(plan.workout_plan_id)
         if existing is None:
             response_by_plan_id[plan.workout_plan_id] = {
@@ -854,12 +881,36 @@ def list_available_workout_plans():
                 'is_assigned_to_user': True,
                 'assignment_id': assignment.assignment_id,
                 'assigned_at': _serialize_datetime(assignment.assigned_at),
+                'is_global_template': is_global,
             }
         else:
             existing['is_assigned_to_user'] = True
+            existing['is_global_template'] = bool(existing.get('is_global_template')) or is_global
             if existing['assignment_id'] is None:
                 existing['assignment_id'] = assignment.assignment_id
                 existing['assigned_at'] = _serialize_datetime(assignment.assigned_at)
+
+    global_rows = (
+        db.session.query(WorkoutPlans)
+        .filter(WorkoutPlans.created_by.is_(None))
+        .order_by(WorkoutPlans.title.asc())
+        .all()
+    )
+    for plan in global_rows:
+        if response_by_plan_id.get(plan.workout_plan_id) is not None:
+            response_by_plan_id[plan.workout_plan_id]['is_global_template'] = True
+            continue
+        response_by_plan_id[plan.workout_plan_id] = {
+            'workout_plan_id': plan.workout_plan_id,
+            'title': plan.title,
+            'created_by': None,
+            'duration_min': plan.duration_min,
+            'is_created_by_user': False,
+            'is_assigned_to_user': False,
+            'assignment_id': None,
+            'assigned_at': None,
+            'is_global_template': True,
+        }
 
     out = list(response_by_plan_id.values())
     out.sort(key=lambda x: (x['title'] or '').lower())
@@ -956,9 +1007,10 @@ def get_workout_plan(plan_id):
         return jsonify({'error': 'Workout plan not found'}), 404
 
     assignment = _get_active_plan_assignment_for_user(plan_id, g.user.user_id)
+    has_global_access = plan.created_by is None
     has_owner_access = plan.created_by is not None and _can_access_user_id(plan.created_by)
     has_assignment_access = assignment is not None
-    if not has_owner_access and not has_assignment_access:
+    if not has_global_access and not has_owner_access and not has_assignment_access:
         return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     if has_assignment_access:
@@ -1492,7 +1544,7 @@ def delete_plan_assignment(assignment_id):
     )
     if plan_day_assignment is not None:
         assignment_row, plan_owner_id = plan_day_assignment
-        if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+        if not _can_edit_plan_created_by(plan_owner_id):
             return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
         db.session.delete(assignment_row)
@@ -1580,7 +1632,7 @@ def update_workout_plan_exercise(workout_plan_exercise_id):
     if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
-    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+    if not _can_edit_plan_created_by(plan_owner_id):
         return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     body = request.get_json(silent=True) or {}
@@ -1627,7 +1679,7 @@ def delete_workout_plan_exercise(workout_plan_exercise_id):
     if pe_row is None:
         return jsonify({'error': 'Workout plan exercise not found'}), 404
     pe, plan_owner_id = pe_row
-    if plan_owner_id is None or not _can_access_user_id(plan_owner_id):
+    if not _can_edit_plan_created_by(plan_owner_id):
         return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
 
     db.session.delete(pe)
@@ -1838,9 +1890,6 @@ def create_workout_from_plan(plan_id):
     )
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
-    access_err = _ensure_plan_access(plan)
-    if access_err is not None:
-        return access_err
 
     body = request.get_json(silent=True) or {}
     requested_uid_raw = body.get('user_id')
@@ -1852,6 +1901,10 @@ def create_workout_from_plan(plan_id):
         requested_uid = g.user.user_id
     if not _can_access_user_id(requested_uid):
         return jsonify({'error': 'You are not authorized to create workouts for this user'}), 403
+
+    access_err = _ensure_can_start_workout_from_plan(plan, requested_uid)
+    if access_err is not None:
+        return access_err
 
     completion_date_raw = body.get('completion_date')
     parsed_completion_date = _parse_datetime_or_none(completion_date_raw) if completion_date_raw is not None else None
@@ -2874,12 +2927,10 @@ def update_workout_exercise(workout_exercise_id):
             description: Workout plan not found
 
     """
-    we = (
-        db.session.query(WorkoutExercises)
+    row = (
+        db.session.query(WorkoutExercises, Workouts.user_id)
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
-        .filter(
-            WorkoutExercises.workout_exercise_id == workout_exercise_id,
-        )
+        .filter(WorkoutExercises.workout_exercise_id == workout_exercise_id)
         .first()
     )
     if row is None:
@@ -2923,12 +2974,10 @@ def delete_workout_exercise(workout_exercise_id):
             description: Workout plan not found
 
     """
-    we = (
-        db.session.query(WorkoutExercises)
+    row = (
+        db.session.query(WorkoutExercises, Workouts.user_id)
         .join(Workouts, Workouts.workout_id == WorkoutExercises.workout_id)
-        .filter(
-            WorkoutExercises.workout_exercise_id == workout_exercise_id,
-        )
+        .filter(WorkoutExercises.workout_exercise_id == workout_exercise_id)
         .first()
     )
     if row is None:
