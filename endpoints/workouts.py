@@ -2071,10 +2071,10 @@ def list_user_workouts():
                     properties:
                         workout_id:
                             type: integer
-                                assignment_id:
-                                    type: integer
-                                assigned_at:
-                                    type: string
+                        assignment_id:
+                            type: integer
+                        assigned_at:
+                            type: string
                         title:
                             type: string
                         notes:
