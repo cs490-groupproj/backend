@@ -26,7 +26,7 @@ env:
 
 on:
   push:
-    branches: [ "deploy" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -52,9 +52,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install pytest
+        run: pip install pytest pytest-cov
 
-      - name: Run unit tests
-        run: pytest
+      - name: Check unit tests with coverage check
+        run: pytest --cov=. --tb=short --no-header -rN --junit-xml=reports/junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: reports/junit.xml
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Pytest Results
+          path: reports/junit.xml
+          reporter: java-junit
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
