@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from auth.authentication import require_auth
@@ -760,16 +760,31 @@ def list_workout_plans():
     accessible_user_ids = [g.user.user_id] + g.clients_ids
     if created_by_raw:
         if created_by_raw.strip().lower() == 'me':
-            q = q.filter(WorkoutPlans.created_by == g.user.user_id)
+            q = q.filter(
+                or_(
+                    WorkoutPlans.created_by == g.user.user_id,
+                    WorkoutPlans.created_by.is_(None),
+                )
+            )
         else:
             created_by_uuid = _parse_uuid(created_by_raw)
             if created_by_uuid is None:
                 return jsonify({'error': 'created_by must be a valid UUID or "me"'}), 400
             if not _can_access_user_id(created_by_uuid):
                 return jsonify({'error': 'You are not authorized to access this workout plan'}), 403
-            q = q.filter(WorkoutPlans.created_by == created_by_uuid)
+            q = q.filter(
+                or_(
+                    WorkoutPlans.created_by == created_by_uuid,
+                    WorkoutPlans.created_by.is_(None),
+                )
+            )
     else:
-        q = q.filter(WorkoutPlans.created_by.in_(accessible_user_ids))
+        q = q.filter(
+            or_(
+                WorkoutPlans.created_by.in_(accessible_user_ids),
+                WorkoutPlans.created_by.is_(None),
+            )
+        )
 
     rows = q.order_by(WorkoutPlans.title).all()
     return jsonify([
