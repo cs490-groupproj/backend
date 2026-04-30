@@ -31,6 +31,8 @@ from endpoints.progress import progress_blueprint
 socketio = SocketIO(cors_allowed_origins="*")
 import message_sockets # DO NOT REMOVE THIS. It appears unused, but needs to be here for the sockets to register
 
+# This is a test comment addition to show our unit-testing automation during deployment.
+
 def create_app(config_overrides=None):
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
