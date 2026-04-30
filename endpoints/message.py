@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
+from httpx import ASGITransport
 from sqlalchemy import and_, func, or_
 
 from auth.authentication import require_auth
@@ -151,14 +152,17 @@ def get_message_history():
     offset = request.args.get("offset")
     other_party_user_id = request.args.get("other_party_user_id")
 
-    other_party_user_id = UUID(other_party_user_id)
-
-    user_id = g.user.user_id
-
     if limit is None or offset is None or other_party_user_id is None:
         return jsonify(
             {"error": "limit and offset are required parameters"}
         ), 400
+
+    try:
+        other_party_user_id = UUID(other_party_user_id)
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({'message': 'Invalid UUID'}), 400
+
+    user_id = g.user.user_id
 
     messages = (
         db.session.query(Messages)

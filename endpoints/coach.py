@@ -92,12 +92,12 @@ def search():
         .group_by(CoachReviews.coach_id) \
         .subquery()
 
-    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 5)) \
+    coaches = db.session.query(Users, func.coalesce(avg_ratings.c.avg_rating, 0)) \
         .outerjoin(avg_ratings, Users.user_id == avg_ratings.c.coach_id) \
         .join(CoachSurveys) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
-        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
+        .order_by(func.coalesce(avg_ratings.c.avg_rating, 5).desc())
 
 
     if query is not None:
@@ -187,7 +187,8 @@ def request_coach(coach_id):
                         type: string
         400:
             description: Error with parameters
-
+        402:
+            description: Billing does not exist
         404:
             description: Coach does not exist
     """
@@ -204,10 +205,9 @@ def request_coach(coach_id):
     if request_check is not None:
         return jsonify({'message': 'Request already exists'}), 400
 
-    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
-
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id).first()
     if client_billing is None:
-        return jsonify({'message': 'client billing does not exist'}), 404
+        return jsonify({'message': 'client billing does not exist'}), 402
 
     coach_request = CoachRequests()
     coach_request.coach_id = coach_id
@@ -467,14 +467,13 @@ def remove_client():
     except (ValueError, TypeError):
         return jsonify({'message': 'Client id parameter is invalid'}), 400
 
-    if client_id not in g.user.clients_ids:
+    if client_id not in g.clients_ids:
         return jsonify({'message': 'User does not coach client'}), 400
 
-    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).all()
+    relationship = db.session.query(ClientCoaches).filter(ClientCoaches.client_id == client_id).filter(ClientCoaches.coach_id == g.user.user_id).first()
     if relationship is None or not relationship:
         return jsonify({'message': 'Relationship does not exist'}), 404
 
-    db.session.delete(relationship.client_billing)
     db.session.delete(relationship)
     db.session.commit()
 
