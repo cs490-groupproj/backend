@@ -527,17 +527,15 @@ def get_user_profile(user_id):
         'date_created': u.date_created.isoformat() if u.date_created else None,
     }
 
-    if u.is_coach:
-        cs = _latest_coach_survey(u.user_id)
-        payload['coach_survey'] = None if cs is None else {
-            'coach_survey_id': cs.coach_survey_id,
-            'specialization': cs.specialization,
-            'qualifications': cs.qualifications,
-            'date_created': cs.date_created.isoformat() if cs.date_created else None,
-            'last_update': cs.last_update.isoformat() if cs.last_update else None,
-        }
-    else:
-        payload['coach_survey'] = None
+    cs = _latest_coach_survey(u.user_id)
+    payload['coach_survey'] = None if cs is None else {
+        'coach_survey_id': cs.coach_survey_id,
+        'specialization': cs.specialization,
+        'qualifications': cs.qualifications,
+        'date_created': cs.date_created.isoformat() if cs.date_created else None,
+        'last_update': cs.last_update.isoformat() if cs.last_update else None,
+    }
+
 
     if u.is_client:
         cg = _latest_client_survey(u.user_id)
