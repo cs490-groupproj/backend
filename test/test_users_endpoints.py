@@ -4,7 +4,7 @@ from unittest.mock import patch
 from sqlalchemy import event
 
 from models import ClientGoals, CoachSurveys, Users
-from test.util import create_user, get_as, patch_as, post_as, post_as_uid
+from util import create_user, get_as, patch_as, post_as, post_as_uid
 
 
 @event.listens_for(Users, 'before_insert')
