@@ -187,7 +187,8 @@ def request_coach(coach_id):
                         type: string
         400:
             description: Error with parameters
-
+        402:
+            description: Billing does not exist
         404:
             description: Coach does not exist
     """
@@ -204,10 +205,9 @@ def request_coach(coach_id):
     if request_check is not None:
         return jsonify({'message': 'Request already exists'}), 400
 
-    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id)
-
+    client_billing = db.session.query(ClientBilling).filter(ClientBilling.client_id == g.user.user_id).first()
     if client_billing is None:
-        return jsonify({'message': 'client billing does not exist'}), 404
+        return jsonify({'message': 'client billing does not exist'}), 402
 
     coach_request = CoachRequests()
     coach_request.coach_id = coach_id
