@@ -186,6 +186,15 @@ def _ensure_can_start_workout_from_plan(plan: WorkoutPlans, workout_owner_id):
     return jsonify({'error': 'You are not authorized to use this workout plan'}), 403
 
 
+def _ensure_can_assign_plan(plan: WorkoutPlans):
+    """Assignment access: global templates are assignable; owned plans require owner access."""
+    if plan.created_by is None:
+        return None
+    if not _can_access_user_id(plan.created_by):
+        return jsonify({'error': 'You are not authorized to assign this workout plan'}), 403
+    return None
+
+
 def _can_edit_plan_created_by(plan_created_by):
     """Mutate plan content: owner, or admin if global template (created_by is None)."""
     if plan_created_by is None:
@@ -1336,7 +1345,7 @@ def add_plan_assignments(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
-    access_err = _ensure_plan_access(plan)
+    access_err = _ensure_can_assign_plan(plan)
     if access_err is not None:
         return access_err
 

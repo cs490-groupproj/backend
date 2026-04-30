@@ -206,6 +206,80 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     assert by_title['Global Template']['is_assigned_to_user'] is False
 
 
+def test_global_plan_can_be_assigned_to_self(client, session):
+    user = create_user(session, 'global-self-user', is_coach=False, is_client=True)
+
+    plan = WorkoutPlans()
+    plan.title = 'Global Self Plan'
+    plan.created_by = None
+    session.add(plan)
+    session.commit()
+
+    payload = {'assignments': [{'weekday': 'Monday', 'schedule_time': '08:00:00'}]}
+    response = post_as(client, user, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
+    body = response.get_json()
+
+    assert response.status_code == 201
+    assert body['workout_plan_id'] == plan.workout_plan_id
+    plan_days = session.query(WorkoutPlanDays).filter(WorkoutPlanDays.workout_plan_id == plan.workout_plan_id).all()
+    assert len(plan_days) == 1
+    assert plan_days[0].weekday == 'Monday'
+
+
+def test_coach_can_assign_global_plan_to_client(client, session):
+    coach = create_user(session, 'global-coach-user', is_coach=True, is_client=False)
+    assigned_client = create_user(session, 'global-client-user', is_coach=False, is_client=True)
+
+    billing = ClientBilling()
+    billing.client_id = assigned_client.user_id
+    billing.card_number = '4111111111111111'
+    billing.card_exp_month = 1
+    billing.card_exp_year = 2030
+    billing.card_security_number = 111
+    billing.card_name = 'Global Client'
+    billing.card_address_1 = '123 St'
+    billing.card_city = 'City'
+    billing.card_postcode = '00000'
+    billing.renew_day_number = 1
+    session.add(billing)
+    session.flush()
+
+    link = ClientCoaches()
+    link.client_id = assigned_client.user_id
+    link.coach_id = coach.user_id
+    link.client_billing_id = billing.client_billing_id
+    session.add(link)
+
+    plan = WorkoutPlans()
+    plan.title = 'Global Coach Assign Plan'
+    plan.created_by = None
+    session.add(plan)
+    session.commit()
+
+    payload = {
+        'client_id': str(assigned_client.user_id),
+        'assignments': [{'weekday': 'Wednesday', 'schedule_time': '09:00:00'}],
+    }
+    response = post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
+    body = response.get_json()
+
+    assert response.status_code == 201
+    assert body['workout_plan_id'] == plan.workout_plan_id
+    assert body['client_id'] == str(assigned_client.user_id)
+    assert len(body['assignments']) == 1
+
+    assignment = (
+        session.query(WorkoutPlanClients)
+        .filter(
+            WorkoutPlanClients.workout_plan_id == plan.workout_plan_id,
+            WorkoutPlanClients.client_id == assigned_client.user_id,
+            WorkoutPlanClients.unassigned_at.is_(None),
+        )
+        .first()
+    )
+    assert assignment is not None
+
+
 def test_assigned_client_can_get_workout_plan_details(client, session):
     coach = create_user(session, 'coach-details', is_coach=True, is_client=False)
     assigned_client = create_user(session, 'client-details', is_coach=False, is_client=True)
