@@ -50,3 +50,9 @@ def patch_as(client, user, path, payload):
     with patch('auth.authentication.auth.verify_id_token') as mock_fb:
         mock_fb.return_value = {'uid': user.firebase_user_id}
         return client.patch(path, json=payload, headers={'Authorization': 'Bearer token'})
+
+
+def put_as(client, user, path, payload):
+    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
+        mock_fb.return_value = {'uid': user.firebase_user_id}
+        return client.put(path, json=payload, headers={'Authorization': 'Bearer token'})
