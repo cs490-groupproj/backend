@@ -24,6 +24,16 @@ def post_as(client, user, path, payload):
         return client.post(path, json=payload, headers={'Authorization': 'Bearer token'})
 
 
+def post_as_uid(client, uid, path, payload):
+    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
+        mock_fb.return_value = {'uid': uid, 'email': f'{uid}@email.com'}
+        return client.post(
+            path,
+            json=payload,
+            headers={'Authorization': 'Bearer token', 'X-Test-Uid': uid},
+        )
+
+
 def get_as(client, user, path):
     with patch('auth.authentication.auth.verify_id_token') as mock_fb:
         mock_fb.return_value = {'uid': user.firebase_user_id}
@@ -34,3 +44,9 @@ def delete_as(client, user, path):
     with patch('auth.authentication.auth.verify_id_token') as mock_fb:
         mock_fb.return_value = {'uid': user.firebase_user_id}
         return client.delete(path, headers={'Authorization': 'Bearer token'})
+
+
+def patch_as(client, user, path, payload):
+    with patch('auth.authentication.auth.verify_id_token') as mock_fb:
+        mock_fb.return_value = {'uid': user.firebase_user_id}
+        return client.patch(path, json=payload, headers={'Authorization': 'Bearer token'})
