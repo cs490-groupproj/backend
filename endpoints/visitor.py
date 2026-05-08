@@ -78,7 +78,7 @@ def search():
         .join(CoachSurveys, CoachSurveys.user_id == Users.user_id) \
         .filter(Users.is_active == True) \
         .filter(Users.is_coach == True) \
-        .order_by(func.coalesce(avg_ratings.c.avg_rating, 0).desc())
+        .order_by(func.coalesce(avg_ratings.c.avg_rating, 5).desc())
 
     total_results = coaches.count()
     coaches = coaches.limit(limit).all()
