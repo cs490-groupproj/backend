@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone, timedelta
 from enum import Enum
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from models import *
 from auth.authentication import require_auth
@@ -496,6 +497,10 @@ def get_daily_survey_history(user_id):
           in: path
           required: true
           type: integer
+        - name: timezone
+          in: path
+          required: true
+          type: string
     responses:
         200:
             description: Daily survey history
@@ -526,12 +531,22 @@ def get_daily_survey_history(user_id):
 
     if not can_access_client_endpoint(g.user, requested_user_id, g.clients_ids):
         return jsonify({'error': 'You are not authorized to view this content'}), 403
-    
+
     days = request.args.get('days', default=7, type=int)
     if days is None or days < 1 or days > 366:
         return jsonify({'error': 'days must be an integer between 1 and 366'}), 400
 
-    cutoff = date.today() - timedelta(days=days - 1)
+    timezone_string = request.args.get('timezone')
+    if timezone_string is None:
+        return jsonify({'error': 'timezone parameter must be included in URL'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone parameter is not valid'}), 400
+
+    today_local = datetime.now(local_tz).date()
+    cutoff = today_local - timedelta(days=days - 1)
 
     rows = (
         db.session.query(DailySurveyResponses)
@@ -580,7 +595,18 @@ def get_daily_survey(user_id):
                 description: User has not submitted a daily survey for today
         """
     user = g.user
-    survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()))
+
+    timezone_string = request.args.get('timezone')
+    if timezone_string is None:
+        return jsonify({'error': 'timezone parameter must be included in URL'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone parameter is not valid'}), 400
+
+    today_local = datetime.now(local_tz).date()
+    survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == today_local))
     if survey is None:
         return jsonify([{'error': 'User has not yet submitted a daily survey for today'}]), 404
     elif survey.user_id != user.user_id:
@@ -650,11 +676,22 @@ def submit_daily_survey(user_id):
     energy = request.json['energy']
     sleep = request.json['sleep']
     notes = request.json['notes']
+    timezone_string = request.json.get('timezone')
 
     if mood is None or energy is None or sleep is None:
         return jsonify({'error': 'JSON must contain mood, energy, sleep, and notes'}), 400
 
-    survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == date.today()).first())
+    if timezone_string is None:
+        return jsonify({'error': 'timezone must be included in body'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone is not valid'}), 400
+
+    today_local = datetime.now(local_tz).date()
+
+    survey = (db.session.query(DailySurveyResponses).filter(DailySurveyResponses.user_id == user_id).filter(DailySurveyResponses.date_submitted == today_local).first())
 
     if survey is not None:
         return jsonify([{'error': 'User already submitted a daily survey for today. Edit using edit endpoint.'}]), 409
@@ -665,7 +702,7 @@ def submit_daily_survey(user_id):
         new_survey.energy = energy
         new_survey.sleep = sleep
         new_survey.notes = notes
-        new_survey.date_submitted = date.today()
+        new_survey.date_submitted = today_local
         db.session.add(new_survey)
         db.session.commit()
 
