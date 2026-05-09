@@ -59,7 +59,7 @@ def test_coach_assignment_uses_workout_plan_clients_table(client, session):
     assert rows[0].weekday == 'Wednesday'
 
 
-def test_non_roster_assignment_falls_back_to_plan_days(client, session):
+def test_non_roster_assignment_is_forbidden(client, session):
     coach = create_user(session, 'coach-fallback', is_coach=True, is_client=False)
     other_user = create_user(session, 'other-user', is_coach=False, is_client=True)
 
@@ -74,12 +74,10 @@ def test_non_roster_assignment_falls_back_to_plan_days(client, session):
         'assignments': [{'weekday': 'Friday', 'schedule_time': '07:30:00'}],
     }
     response = post_as(client, coach, f'/workout-plans/{plan.workout_plan_id}/assignments', payload)
-    body = response.get_json()
-    assert response.status_code == 201
-    assert body['workout_plan_id'] == plan.workout_plan_id
+    assert response.status_code == 403
 
     plan_days = session.query(WorkoutPlanDays).filter(WorkoutPlanDays.workout_plan_id == plan.workout_plan_id).all()
-    assert len(plan_days) == 1
+    assert len(plan_days) == 0
     assignments = session.query(WorkoutPlanClients).filter(WorkoutPlanClients.workout_plan_id == plan.workout_plan_id).all()
     assert len(assignments) == 0
 
@@ -221,9 +219,67 @@ def test_global_plan_can_be_assigned_to_self(client, session):
 
     assert response.status_code == 201
     assert body['workout_plan_id'] == plan.workout_plan_id
-    plan_days = session.query(WorkoutPlanDays).filter(WorkoutPlanDays.workout_plan_id == plan.workout_plan_id).all()
-    assert len(plan_days) == 1
-    assert plan_days[0].weekday == 'Monday'
+    assert body['client_id'] == str(user.user_id)
+
+    assignment = (
+        session.query(WorkoutPlanClients)
+        .filter(
+            WorkoutPlanClients.workout_plan_id == plan.workout_plan_id,
+            WorkoutPlanClients.client_id == user.user_id,
+            WorkoutPlanClients.unassigned_at.is_(None),
+        )
+        .first()
+    )
+    assert assignment is not None
+    assignment_days = (
+        session.query(WorkoutPlanClientDays)
+        .filter(WorkoutPlanClientDays.assignment_id == assignment.assignment_id)
+        .all()
+    )
+    assert len(assignment_days) == 1
+    assert assignment_days[0].weekday == 'Monday'
+
+
+def test_global_plan_details_hide_template_assignments_for_non_assigned_users(client, session):
+    assignee = create_user(session, 'global-details-assignee', is_coach=False, is_client=True)
+    other_user = create_user(session, 'global-details-other', is_coach=False, is_client=True)
+
+    plan = WorkoutPlans()
+    plan.title = 'Global Detail Privacy Plan'
+    plan.created_by = None
+    session.add(plan)
+    session.flush()
+
+    default_day = WorkoutPlanDays()
+    default_day.workout_plan_id = plan.workout_plan_id
+    default_day.weekday = 'Thursday'
+    default_day.schedule_time = time(6, 0, 0)
+    session.add(default_day)
+
+    assignment = WorkoutPlanClients()
+    assignment.workout_plan_id = plan.workout_plan_id
+    assignment.client_id = assignee.user_id
+    assignment.assigned_by = assignee.user_id
+    session.add(assignment)
+    session.flush()
+
+    assignment_day = WorkoutPlanClientDays()
+    assignment_day.assignment_id = assignment.assignment_id
+    assignment_day.weekday = 'Friday'
+    assignment_day.schedule_time = time(7, 15, 0)
+    session.add(assignment_day)
+    session.commit()
+
+    assignee_resp = get_as(client, assignee, f'/workout-plans/{plan.workout_plan_id}')
+    assignee_body = assignee_resp.get_json()
+    assert assignee_resp.status_code == 200
+    assert len(assignee_body['assignments']) == 1
+    assert assignee_body['assignments'][0]['weekday'] == 'Friday'
+
+    other_resp = get_as(client, other_user, f'/workout-plans/{plan.workout_plan_id}')
+    other_body = other_resp.get_json()
+    assert other_resp.status_code == 200
+    assert other_body['assignments'] == []
 
 
 def test_coach_can_assign_global_plan_to_client(client, session):

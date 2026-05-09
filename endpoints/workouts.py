@@ -1047,9 +1047,11 @@ def get_workout_plan(plan_id):
         if assignment_rows:
             assignments_payload = [_plan_client_day_public(day) for day in assignment_rows]
         else:
-            assignments_payload = [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)]
-    else:
+            assignments_payload = []
+    elif has_owner_access:
         assignments_payload = [_plan_day_public(day) for day in sorted(plan.workout_plan_days, key=lambda d: d.id)]
+    else:
+        assignments_payload = []
 
     exercises = sorted(plan.workout_plan_exercises, key=lambda x: (x.position, x.workout_plan_exercise_id))
     return jsonify({
@@ -1380,82 +1382,64 @@ def add_plan_assignments(plan_id):
     if target_client_raw is not None and target_client_id is None:
         return jsonify({'error': 'client_id must be a valid UUID'}), 400
 
-    should_create_client_assignment = (
-        target_client_id is not None and _is_coach_for_client(target_client_id)
-    )
+    if target_client_id is None:
+        target_client_id = g.user.user_id
+    elif not _can_access_user_id(target_client_id):
+        return jsonify({'error': 'You are not authorized to assign workouts for this user'}), 403
 
-    if should_create_client_assignment:
-        assignment = (
-            db.session.query(WorkoutPlanClients)
-            .filter(
-                WorkoutPlanClients.workout_plan_id == plan_id,
-                WorkoutPlanClients.client_id == target_client_id,
-                WorkoutPlanClients.unassigned_at.is_(None),
-            )
-            .order_by(WorkoutPlanClients.assignment_id.desc())
-            .first()
+    assignment = (
+        db.session.query(WorkoutPlanClients)
+        .filter(
+            WorkoutPlanClients.workout_plan_id == plan_id,
+            WorkoutPlanClients.client_id == target_client_id,
+            WorkoutPlanClients.unassigned_at.is_(None),
         )
-        if assignment is None:
-            assignment = WorkoutPlanClients()
-            assignment.workout_plan_id = plan_id
-            assignment.client_id = target_client_id
-            assignment.assigned_by = g.user.user_id
-            db.session.add(assignment)
-            db.session.flush()
+        .order_by(WorkoutPlanClients.assignment_id.desc())
+        .first()
+    )
+    if assignment is None:
+        assignment = WorkoutPlanClients()
+        assignment.workout_plan_id = plan_id
+        assignment.client_id = target_client_id
+        assignment.assigned_by = g.user.user_id
+        db.session.add(assignment)
+        db.session.flush()
 
-        db.session.query(WorkoutPlanClientDays).filter(
-            WorkoutPlanClientDays.assignment_id == assignment.assignment_id
-        ).delete(synchronize_session=False)
+    db.session.query(WorkoutPlanClientDays).filter(
+        WorkoutPlanClientDays.assignment_id == assignment.assignment_id
+    ).delete(synchronize_session=False)
 
-        schedule_items = parsed_items
+    schedule_items = parsed_items
+    if not schedule_items:
+        defaults = (
+            db.session.query(WorkoutPlanDays)
+            .filter(WorkoutPlanDays.workout_plan_id == plan_id)
+            .order_by(WorkoutPlanDays.id.asc())
+            .all()
+        )
+        schedule_items = [{'weekday': d.weekday, 'schedule_time': d.schedule_time} for d in defaults]
         if not schedule_items:
-            defaults = (
-                db.session.query(WorkoutPlanDays)
-                .filter(WorkoutPlanDays.workout_plan_id == plan_id)
-                .order_by(WorkoutPlanDays.id.asc())
-                .all()
-            )
-            schedule_items = [{'weekday': d.weekday, 'schedule_time': d.schedule_time} for d in defaults]
-            if not schedule_items:
-                return jsonify({'error': 'No default plan schedule exists; provide assignments in request body'}), 400
-
-        created = []
-        for item in schedule_items:
-            row = WorkoutPlanClientDays()
-            row.assignment_id = assignment.assignment_id
-            row.weekday = item['weekday']
-            row.schedule_time = item['schedule_time']
-            db.session.add(row)
-            db.session.flush()
-            created.append(_plan_client_day_public(row))
-
-        db.session.commit()
-        return jsonify({
-            'assignment_id': assignment.assignment_id,
-            'workout_plan_id': assignment.workout_plan_id,
-            'client_id': str(assignment.client_id),
-            'assigned_by': str(assignment.assigned_by),
-            'assigned_at': _serialize_datetime(assignment.assigned_at),
-            'assignments': created,
-        }), 201
-
-    if not parsed_items:
-        return jsonify({'error': 'Send a single assignment object or { "assignments": [ ... ] }'}), 400
+            return jsonify({'error': 'No default plan schedule exists; provide assignments in request body'}), 400
 
     created = []
-    for item in parsed_items:
-        row = WorkoutPlanDays()
-        row.workout_plan_id = plan_id
+    for item in schedule_items:
+        row = WorkoutPlanClientDays()
+        row.assignment_id = assignment.assignment_id
         row.weekday = item['weekday']
         row.schedule_time = item['schedule_time']
         db.session.add(row)
         db.session.flush()
-        created.append(_plan_day_public(row))
+        created.append(_plan_client_day_public(row))
 
     db.session.commit()
-    if len(created) == 1:
-        return jsonify(created[0]), 201
-    return jsonify({'assignments': created}), 201
+    return jsonify({
+        'assignment_id': assignment.assignment_id,
+        'workout_plan_id': assignment.workout_plan_id,
+        'client_id': str(assignment.client_id),
+        'assigned_by': str(assignment.assigned_by),
+        'assigned_at': _serialize_datetime(assignment.assigned_at),
+        'assignments': created,
+    }), 201
 
 
 @workouts_blueprint.route('/workout-plans/<int:plan_id>/assignments', methods=['GET'])
