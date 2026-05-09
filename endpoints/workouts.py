@@ -919,6 +919,8 @@ def list_available_workout_plans():
                             type: boolean
                         is_assigned_to_user:
                             type: boolean
+                        has_assignment_days:
+                            type: boolean
                         is_global_template:
                             type: boolean
                         assignment_id:
@@ -956,6 +958,7 @@ def list_available_workout_plans():
             'duration_min': plan.duration_min,
             'is_created_by_user': True,
             'is_assigned_to_user': False,
+            'has_assignment_days': False,
             'assignment_id': None,
             'assigned_at': None,
             'is_global_template': False,
@@ -971,8 +974,25 @@ def list_available_workout_plans():
         .order_by(WorkoutPlanClients.assigned_at.desc(), WorkoutPlanClients.assignment_id.desc())
         .all()
     )
+    assignment_ids = [assignment.assignment_id for assignment, _ in assigned_rows]
+    assignment_day_counts = {}
+    if assignment_ids:
+        assignment_day_rows = (
+            db.session.query(
+                WorkoutPlanClientDays.assignment_id,
+                func.count(WorkoutPlanClientDays.id),
+            )
+            .filter(WorkoutPlanClientDays.assignment_id.in_(assignment_ids))
+            .group_by(WorkoutPlanClientDays.assignment_id)
+            .all()
+        )
+        assignment_day_counts = {
+            assignment_id: int(day_count or 0)
+            for assignment_id, day_count in assignment_day_rows
+        }
     for assignment, plan in assigned_rows:
         is_global = plan.created_by is None
+        has_assignment_days = assignment_day_counts.get(assignment.assignment_id, 0) > 0
         existing = response_by_plan_id.get(plan.workout_plan_id)
         if existing is None:
             response_by_plan_id[plan.workout_plan_id] = {
@@ -982,12 +1002,14 @@ def list_available_workout_plans():
                 'duration_min': plan.duration_min,
                 'is_created_by_user': plan.created_by == target_user_id,
                 'is_assigned_to_user': True,
+                'has_assignment_days': has_assignment_days,
                 'assignment_id': assignment.assignment_id,
                 'assigned_at': _serialize_datetime(assignment.assigned_at),
                 'is_global_template': is_global,
             }
         else:
             existing['is_assigned_to_user'] = True
+            existing['has_assignment_days'] = bool(existing.get('has_assignment_days')) or has_assignment_days
             existing['is_global_template'] = bool(existing.get('is_global_template')) or is_global
             if existing['assignment_id'] is None:
                 existing['assignment_id'] = assignment.assignment_id
@@ -1010,6 +1032,7 @@ def list_available_workout_plans():
             'duration_min': plan.duration_min,
             'is_created_by_user': False,
             'is_assigned_to_user': False,
+            'has_assignment_days': False,
             'assignment_id': None,
             'assigned_at': None,
             'is_global_template': True,

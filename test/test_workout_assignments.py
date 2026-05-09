@@ -179,6 +179,13 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     assignment.client_id = target_client.user_id
     assignment.assigned_by = coach.user_id
     session.add(assignment)
+    session.flush()
+
+    assignment_day = WorkoutPlanClientDays()
+    assignment_day.assignment_id = assignment.assignment_id
+    assignment_day.weekday = 'Tuesday'
+    assignment_day.schedule_time = time(7, 0, 0)
+    session.add(assignment_day)
 
     global_plan = WorkoutPlans()
     global_plan.title = 'Global Template'
@@ -194,14 +201,17 @@ def test_available_workout_plans_unions_created_and_assigned(client, session):
     by_title = {row['title']: row for row in body}
     assert by_title['Client Created Plan']['is_created_by_user'] is True
     assert by_title['Client Created Plan']['is_assigned_to_user'] is False
+    assert by_title['Client Created Plan']['has_assignment_days'] is False
     assert by_title['Client Created Plan']['is_global_template'] is False
     assert by_title['Coach Assigned Plan']['is_created_by_user'] is False
     assert by_title['Coach Assigned Plan']['is_assigned_to_user'] is True
+    assert by_title['Coach Assigned Plan']['has_assignment_days'] is True
     assert by_title['Coach Assigned Plan']['is_global_template'] is False
     assert by_title['Global Template']['created_by'] is None
     assert by_title['Global Template']['is_global_template'] is True
     assert by_title['Global Template']['is_created_by_user'] is False
     assert by_title['Global Template']['is_assigned_to_user'] is False
+    assert by_title['Global Template']['has_assignment_days'] is False
 
 
 def test_global_plan_can_be_assigned_to_self(client, session):
