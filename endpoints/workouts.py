@@ -1,6 +1,7 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func, or_
@@ -2146,6 +2147,10 @@ def workout_sets_logged_history():
           in: path
           required: true
           type: integer
+        - name: timezone
+          in: path
+          required: true
+          type: string
     responses:
         200:
             description: Get historical sets logged
@@ -2160,6 +2165,8 @@ def workout_sets_logged_history():
                             type: integer
                         completion_date:
                             type: string
+                        local_date:
+                            type: string
 
     """
     uid, uid_err = _require_authorized_user_id()
@@ -2170,8 +2177,21 @@ def workout_sets_logged_history():
     if days_err is not None:
         return days_err
 
-    cutoff = date.today() - timedelta(days=days - 1)
-    cutoff_dt = datetime.combine(cutoff, time.min)
+    timezone_string = request.args.get('timezone')
+    if timezone_string is None:
+        return jsonify({'error': 'timezone parameter must be included in URL'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone parameter is not valid'}), 400
+
+    now_local = datetime.now(local_tz)
+    local_start_date = now_local.date() - timedelta(days=days - 1)
+    local_start_dt = datetime.combine(local_start_date, time.min, tzinfo=local_tz)
+    local_end_dt = datetime.combine(now_local.date() + timedelta(days=1), time.min, tzinfo=local_tz)
+    utc_start = local_start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end_dt.astimezone(timezone.utc).replace(tzinfo=None)
 
     rows = (
         db.session.query(
@@ -2182,7 +2202,8 @@ def workout_sets_logged_history():
         .outerjoin(WorkoutExercises, WorkoutExercises.workout_id == Workouts.workout_id)
         .filter(Workouts.user_id == uid)
         .filter(Workouts.completion_date.isnot(None))
-        .filter(Workouts.completion_date >= cutoff_dt)
+        .filter(Workouts.completion_date >= utc_start)
+        .filter(Workouts.completion_date < utc_end)
         .group_by(Workouts.workout_id, Workouts.completion_date)
         .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
         .all()
@@ -2193,6 +2214,7 @@ def workout_sets_logged_history():
             'workout_id': r.workout_id,
             'sets_logged': int(r.sets_logged or 0),
             'completion_date': _serialize_datetime(r.completion_date),
+            'local_date': r.completion_date.replace(tzinfo=timezone.utc).astimezone(local_tz).date().isoformat() if r.completion_date else None,
         }
         for r in rows
     ]), 200
@@ -2215,6 +2237,10 @@ def workout_total_time_history():
           in: path
           required: true
           type: integer
+        - name: timezone
+          in: path
+          required: true
+          type: string
     responses:
         200:
             description: Get historical workout time logged
@@ -2229,6 +2255,8 @@ def workout_total_time_history():
                             type: integer
                         completion_date:
                             type: string
+                        local_date:
+                            type: string
 
     """
     uid, uid_err = _require_authorized_user_id()
@@ -2239,8 +2267,21 @@ def workout_total_time_history():
     if days_err is not None:
         return days_err
 
-    cutoff = date.today() - timedelta(days=days - 1)
-    cutoff_dt = datetime.combine(cutoff, time.min)
+    timezone_string = request.args.get('timezone')
+    if timezone_string is None:
+        return jsonify({'error': 'timezone parameter must be included in URL'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone parameter is not valid'}), 400
+
+    now_local = datetime.now(local_tz)
+    local_start_date = now_local.date() - timedelta(days=days - 1)
+    local_start_dt = datetime.combine(local_start_date, time.min, tzinfo=local_tz)
+    local_end_dt = datetime.combine(now_local.date() + timedelta(days=1), time.min, tzinfo=local_tz)
+    utc_start = local_start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end_dt.astimezone(timezone.utc).replace(tzinfo=None)
 
     rows = (
         db.session.query(
@@ -2250,7 +2291,8 @@ def workout_total_time_history():
         )
         .filter(Workouts.user_id == uid)
         .filter(Workouts.completion_date.isnot(None))
-        .filter(Workouts.completion_date >= cutoff_dt)
+        .filter(Workouts.completion_date >= utc_start)
+        .filter(Workouts.completion_date < utc_end)
         .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
         .all()
     )
@@ -2260,6 +2302,7 @@ def workout_total_time_history():
             'workout_id': r.workout_id,
             'total_workout_time': r.duration_mins,
             'completion_date': _serialize_datetime(r.completion_date),
+            'local_date': r.completion_date.replace(tzinfo=timezone.utc).astimezone(local_tz).date().isoformat() if r.completion_date else None,
         }
         for r in rows
     ]), 200
@@ -2282,6 +2325,10 @@ def workout_total_volume_history():
           in: path
           required: true
           type: integer
+        - name: timezone
+          in: path
+          required: true
+          type: string
     responses:
         200:
             description: Get historical volume logged
@@ -2296,6 +2343,8 @@ def workout_total_volume_history():
                             type: integer
                         completion_date:
                             type: string
+                        local_date:
+                            type: string
 
     """
     uid, uid_err = _require_authorized_user_id()
@@ -2306,8 +2355,21 @@ def workout_total_volume_history():
     if days_err is not None:
         return days_err
 
-    cutoff = date.today() - timedelta(days=days - 1)
-    cutoff_dt = datetime.combine(cutoff, time.min)
+    timezone_string = request.args.get('timezone')
+    if timezone_string is None:
+        return jsonify({'error': 'timezone parameter must be included in URL'}), 400
+
+    try:
+        local_tz = ZoneInfo(timezone_string)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'timezone parameter is not valid'}), 400
+
+    now_local = datetime.now(local_tz)
+    local_start_date = now_local.date() - timedelta(days=days - 1)
+    local_start_dt = datetime.combine(local_start_date, time.min, tzinfo=local_tz)
+    local_end_dt = datetime.combine(now_local.date() + timedelta(days=1), time.min, tzinfo=local_tz)
+    utc_start = local_start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end_dt.astimezone(timezone.utc).replace(tzinfo=None)
 
     rows = (
         db.session.query(
@@ -2325,7 +2387,8 @@ def workout_total_volume_history():
         .outerjoin(WorkoutExercises, WorkoutExercises.workout_id == Workouts.workout_id)
         .filter(Workouts.user_id == uid)
         .filter(Workouts.completion_date.isnot(None))
-        .filter(Workouts.completion_date >= cutoff_dt)
+        .filter(Workouts.completion_date >= utc_start)
+        .filter(Workouts.completion_date < utc_end)
         .group_by(Workouts.workout_id, Workouts.completion_date)
         .order_by(Workouts.completion_date.asc(), Workouts.workout_id.asc())
         .all()
@@ -2336,6 +2399,7 @@ def workout_total_volume_history():
             'workout_id': r.workout_id,
             'total_volume': _serialize_decimal(r.total_volume),
             'completion_date': _serialize_datetime(r.completion_date),
+            'local_date': r.completion_date.replace(tzinfo=timezone.utc).astimezone(local_tz).date().isoformat() if r.completion_date else None,
         }
         for r in rows
     ]), 200
