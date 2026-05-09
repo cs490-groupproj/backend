@@ -780,8 +780,10 @@ def edit_daily_survey(user_id):
     elif survey.user_id != user.user_id:
         return jsonify([{'error': 'You are not authorized to modify this content'}]), 401
     else:
-        survey.mood = mood or survey.mood
-        survey.notes = notes or survey.notes
+        if mood is not None:
+            survey.mood = mood
+        if notes is not None:
+            survey.notes = notes
         if energy is not None:
             survey.energy = energy
         if sleep is not None:
