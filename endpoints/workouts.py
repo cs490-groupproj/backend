@@ -807,6 +807,85 @@ def list_workout_plans():
     ]), 200
 
 
+@workouts_blueprint.route('/workout-plans/global', methods=['GET'])
+@require_auth
+def list_global_workout_plans():
+    """
+    List global workout plan templates only (admin).
+    ---
+    tags:
+        - Workouts
+    responses:
+        200:
+            description: Global workout plans
+        401:
+            description: Not an admin
+    """
+    admin_err = _require_admin()
+    if admin_err is not None:
+        return admin_err
+
+    rows = (
+        db.session.query(WorkoutPlans)
+        .filter(WorkoutPlans.created_by.is_(None))
+        .order_by(WorkoutPlans.title.asc())
+        .all()
+    )
+    return jsonify([
+        {
+            'workout_plan_id': r.workout_plan_id,
+            'title': r.title,
+            'created_by': None,
+            'duration_min': r.duration_min,
+        }
+        for r in rows
+    ]), 200
+
+
+@workouts_blueprint.route('/workout-plans/global', methods=['POST'])
+@require_auth
+def create_global_workout_plan():
+    """
+    Create a global workout plan template (admin). created_by is always NULL.
+    ---
+    tags:
+        - Workouts
+    responses:
+        201:
+            description: Created global plan
+        400:
+            description: Invalid parameters
+        401:
+            description: Not an admin
+    """
+    admin_err = _require_admin()
+    if admin_err is not None:
+        return admin_err
+
+    body = request.get_json(silent=True) or {}
+    title = body.get('title')
+    if not title or not str(title).strip():
+        return jsonify({'error': 'title is required'}), 400
+
+    if body.get('created_by') is not None:
+        return jsonify({'error': 'Do not set created_by when creating a global template; omit the field'}), 400
+
+    plan = WorkoutPlans()
+    plan.title = str(title).strip()
+    plan.workout_type_id = _int_or_none(body.get('workout_type_id'))
+    plan.description = body.get('description')
+    plan.duration_min = _int_or_none(body.get('duration_min'))
+    plan.created_by = None
+
+    if plan.workout_type_id is not None:
+        if db.session.query(WorkoutTypes).filter(WorkoutTypes.workout_type_id == plan.workout_type_id).first() is None:
+            return jsonify({'error': 'Invalid workout_type_id'}), 400
+
+    db.session.add(plan)
+    db.session.commit()
+    return jsonify({'workout_plan_id': plan.workout_plan_id}), 201
+
+
 @workouts_blueprint.route('/workout-plans/available', methods=['GET'])
 @require_auth
 def list_available_workout_plans():
@@ -1176,11 +1255,23 @@ def update_workout_plan(plan_id):
     plan = db.session.query(WorkoutPlans).filter(WorkoutPlans.workout_plan_id == plan_id).first()
     if plan is None:
         return jsonify({'error': 'Workout plan not found'}), 404
-    access_err = _ensure_plan_access(plan)
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        body = {}
+
+    promote_to_global = (
+        'created_by' in body
+        and body.get('created_by') is None
+        and plan.created_by is not None
+    )
+    if promote_to_global and can_access_admin_endpoint(g.user):
+        access_err = None
+    else:
+        access_err = _ensure_plan_access(plan)
     if access_err is not None:
         return access_err
 
-    body = request.get_json(silent=True) or {}
     if not body:
         return jsonify({'error': 'JSON body required'}), 400
 
@@ -1206,6 +1297,10 @@ def update_workout_plan(plan_id):
     if 'created_by' in body:
         created_by = body.get('created_by')
         if created_by is None:
+            if plan.created_by is not None and not can_access_admin_endpoint(g.user):
+                return jsonify({
+                    'error': 'Only admins can set a workout plan to global (created_by null)',
+                }), 403
             plan.created_by = None
         else:
             uid = _parse_uuid(created_by)
