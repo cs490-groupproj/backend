@@ -349,6 +349,8 @@ def applications():
                                     type: string
                                 qualifications:
                                     type: string
+                                cost:
+                                    type: integer
                                 date_submitted:
                                     type: string
     """
@@ -375,6 +377,7 @@ def applications():
             'email': s.user.email,
             'specialization': s.specialization,
             'qualifications': s.qualifications,
+            'cost': s.user.coach_cost,
             'date_submitted': str(s.date_created)
         } for s in surveys]
     })
