@@ -363,7 +363,7 @@ def applications():
     if limit is None or offset is None:
         return jsonify({'message': 'limit and offset are required parameters'}), 400
 
-    query = db.session.query(CoachSurveys).join(Users).filter(Users.is_coach == False).order_by(CoachSurveys.date_created.desc())
+    query = db.session.query(CoachSurveys).join(Users).filter(Users.is_coach == False).filter(Users.is_active == True).order_by(CoachSurveys.date_created.desc())
     count = query.count()
     surveys = query.limit(limit).offset(offset).all()
 
